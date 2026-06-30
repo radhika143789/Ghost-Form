@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Ghost Form Options</title>
+  <link rel="stylesheet" href="options.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <h1>Ghost Form Settings</h1>
+    <p>Manage your trusted domains. Ghost Form will ignore forms on these websites.</p>
+    
+    <div class="whitelist-section">
+      <div class="input-group">
+        <input type="text" id="domainInput" placeholder="e.g., internal-portal.company.com">
+        <button id="addBtn">Add to Whitelist</button>
+      </div>
+      
+      <ul id="whitelist" class="whitelist">
+        <!-- Whitelisted domains will be listed here -->
+      </ul>
+    </div>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>
