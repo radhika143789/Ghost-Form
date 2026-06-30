@@ -1,0 +1,142 @@
+:root {
+  --bg-color: #0f172a;
+  --text-color: #f8fafc;
+  --safe-color: #10b981;
+  --unsafe-color: #ef4444;
+  --card-bg: #1e293b;
+}
+
+body {
+  width: 320px;
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+}
+
+.container {
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 16px;
+}
+
+.logo {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: white;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.status-card {
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  padding: 24px 20px;
+  text-align: center;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.status-card.safe {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.15);
+}
+
+.status-card.unsafe {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.15);
+}
+
+.status-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.status-card.safe .status-icon {
+  background-color: rgba(16, 185, 129, 0.2);
+}
+
+.status-card.safe .status-icon::after {
+  content: "✓";
+  color: var(--safe-color);
+  font-size: 32px;
+  font-weight: bold;
+}
+
+.status-card.unsafe .status-icon {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+.status-card.unsafe .status-icon::after {
+  content: "!";
+  color: var(--unsafe-color);
+  font-size: 32px;
+  font-weight: bold;
+}
+
+#statusTitle {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.status-card.safe #statusTitle {
+  color: var(--safe-color);
+}
+
+.status-card.unsafe #statusTitle {
+  color: var(--unsafe-color);
+}
+
+#statusDesc {
+  margin: 0;
+  font-size: 14px;
+  color: #94a3b8;
+  line-height: 1.5;
+}
+
+.domain-info {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  background-color: #1e293b;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+#currentDomain {
+  display: block;
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--text-color);
+  word-break: break-all;
+  font-family: monospace;
+}

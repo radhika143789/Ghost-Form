@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Ghost Form",
+  "version": "2.0.0",
+  "description": "Prevents users from accidentally typing sensitive data into forms on phishing or unverified websites.",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "css": ["content.css"],
+      "js": ["content.js"],
+      "run_at": "document_end",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Ghost Form"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://ghost-form-proxy.yourdomain.workers.dev"
+  }
+}
