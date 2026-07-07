@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ghost Form — Zero-Knowledge Phishing Protection</title>
+  <meta name="description" content="Ghost Form uses on-device machine learning to protect you from phishing sites in real time. No keystroke logging. No external APIs. 100% private." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'ghost-black':  '#080c14',
+            'ghost-slate':  '#0d1420',
+            'ghost-dark':   '#111827',
+            'ghost-card':   '#141e30',
+            'ghost-border': '#1e2d45',
+            'ghost-muted':  '#64748b',
+            'neon-green':   '#00ff88',
+            'neon-dim':     '#00cc6a',
+            'neon-glow':    '#00ff8833',
+            'alert-red':    '#ff4444',
+            'alert-orange': '#ff6b35',
+            'alert-yellow': '#ffcc00',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          boxShadow: {
+            'neon':      '0 0 20px rgba(0, 255, 136, 0.35)',
+            'neon-lg':   '0 0 40px rgba(0, 255, 136, 0.25)',
+            'red-glow':  '0 0 15px rgba(255, 68, 68, 0.5)',
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'scan': 'scan 3s linear infinite',
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { background-color: #080c14; }
+    
+    .gradient-text {
+      background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-grid {
+      background-image:
+        linear-gradient(rgba(0, 255, 136, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 136, 0.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    .card-glow {
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.06), rgba(0, 255, 136, 0.01));
+      border: 1px solid rgba(0, 255, 136, 0.12);
+    }
+
+    .card-glow:hover {
+      border-color: rgba(0, 255, 136, 0.3);
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.08);
+      transition: all 0.3s ease;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00ff88, #00ccaa);
+      transition: all 0.25s ease;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 255, 136, 0.45);
+    }
+    .btn-primary:active { transform: translateY(0); }
+
+    .tag-mono {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+    }
+
+    /* Animated phishing demo field */
+    @keyframes danger-pulse {
+      0%, 100% { box-shadow: 0 0 10px rgba(255, 68, 68, 0.4), inset 0 0 10px rgba(255, 68, 68, 0.05); }
+      50%       { box-shadow: 0 0 24px rgba(255, 68, 68, 0.8), inset 0 0 14px rgba(255, 68, 68, 0.1); }
+    }
+    .field-danger { animation: danger-pulse 2s ease-in-out infinite; }
+
+    @keyframes safe-pulse {
+      0%, 100% { box-shadow: 0 0 8px rgba(0, 255, 136, 0.3); }
+      50%       { box-shadow: 0 0 20px rgba(0, 255, 136, 0.6); }
+    }
+    .field-safe { animation: safe-pulse 2.5s ease-in-out infinite; }
+
+    /* Mobile menu toggle */
+    #mobile-menu { display: none; }
+    #mobile-menu.open { display: block; }
+
+    .step-line::after {
+      content: '';
+      position: absolute;
+      top: 28px;
+      left: calc(50% + 40px);
+      width: calc(100% - 80px);
+      height: 1px;
+      background: linear-gradient(90deg, rgba(0, 255, 136, 0.4), rgba(0, 255, 136, 0.05));
+    }
+  </style>
+</head>
+
+<body class="font-sans text-slate-200 antialiased overflow-x-hidden">
+
+  <!-- ============================================================
+       NAVBAR
+  ============================================================ -->
+  <nav class="fixed top-0 left-0 right-0 z-50 border-b border-ghost-border"
+       style="background: rgba(8, 12, 20, 0.85); backdrop-filter: blur(20px);">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+
+        <!-- Logo -->
+        <a href="#" class="flex items-center gap-3 group">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-ghost-black"
+               style="background: linear-gradient(135deg, #00ff88, #00ccaa);">
+            GF
+          </div>
+          <span class="font-bold text-lg text-white tracking-tight">Ghost Form</span>
+          <span class="tag-mono px-2 py-0.5 rounded-full text-neon-green bg-neon-glow">BETA</span>
+        </a>
+
+        <!-- Desktop Nav -->
+        <div class="hidden md:flex items-center gap-8">
+          <a href="#features" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">Features</a>
+          <a href="#how-it-works" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">How it Works</a>
+          <a href="#privacy" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">Privacy</a>
+          <a href="#install"
+             class="btn-primary px-5 py-2 rounded-lg text-sm font-bold text-ghost-black">
+            Add to Chrome →
+          </a>
+        </div>
+
+        <!-- Mobile Menu Button -->
+        <button id="hamburger" class="md:hidden p-2 text-slate-400 hover:text-white" aria-label="Open menu">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Menu -->
+    <div id="mobile-menu" class="md:hidden border-t border-ghost-border px-4 py-4 space-y-4"
+         style="background: rgba(8, 12, 20, 0.98);">
+      <a href="#features"    class="block text-slate-300 hover:text-neon-green py-2">Features</a>
+      <a href="#how-it-works" class="block text-slate-300 hover:text-neon-green py-2">How it Works</a>
+      <a href="#privacy"     class="block text-slate-300 hover:text-neon-green py-2">Privacy</a>
+      <a href="#install"     class="btn-primary block text-center px-5 py-3 rounded-lg font-bold text-ghost-black">Add to Chrome</a>
+    </div>
+  </nav>
+
+  <!-- ============================================================
+       HERO
+  ============================================================ -->
+  <section id="hero" class="hero-grid relative min-h-screen flex items-center justify-center pt-16 pb-24 overflow-hidden">
+
+    <!-- Radial glow backdrop -->
+    <div class="absolute inset-0 pointer-events-none"
+         style="background: radial-gradient(ellipse 60% 55% at 50% 40%, rgba(0,255,136,0.07) 0%, transparent 70%);"></div>
+
+    <div class="relative max-w-5xl mx-auto px-4 sm:px-6 text-center">
+
+      <!-- Pill badge -->
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-ghost-border mb-8
+                  tag-mono text-neon-green bg-neon-glow">
+        <span class="w-2 h-2 rounded-full bg-neon-green animate-pulse"></span>
+        ON-DEVICE ML · ZERO API CALLS · 100% PRIVATE
+      </div>
+
+      <!-- Headline -->
+      <h1 class="text-5xl sm:text-6xl lg:text-7xl font-black leading-tight tracking-tight mb-6">
+        Stop Phishing Before<br/>
+        <span class="gradient-text">You Type a Single Key</span>
+      </h1>
+
+      <!-- Subheadline -->
+      <p class="max-w-2xl mx-auto text-lg sm:text-xl text-slate-400 leading-relaxed mb-10">
+        Ghost Form uses <strong class="text-white">on-device machine learning</strong> to detect zero-day phishing pages in real time.
+        Your passwords and form data <strong class="text-neon-green">never leave your browser</strong>.
+        No cloud. No API keys. No surveillance.
+      </p>
+
+      <!-- CTAs -->
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+        <a id="install" href="#"
+           class="btn-primary w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-ghost-black text-lg">
+          🛡️ Install for Free
+        </a>
+        <a href="#how-it-works"
+           class="w-full sm:w-auto px-8 py-4 rounded-xl font-semibold text-slate-300 border border-ghost-border hover:border-neon-green hover:text-neon-green transition-all duration-200">
+          See How It Works →
+        </a>
+      </div>
+
+      <!-- Live Demo UI Mockup -->
+      <div class="max-w-md mx-auto card-glow rounded-2xl p-6 text-left">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-3 h-3 rounded-full bg-alert-red opacity-80"></div>
+          <div class="w-3 h-3 rounded-full bg-alert-yellow opacity-80"></div>
+          <div class="w-3 h-3 rounded-full bg-neon-green opacity-80"></div>
+          <div class="ml-3 flex-1 bg-ghost-slate rounded-md px-3 py-1 font-mono text-xs text-slate-500">
+            paypa1-secure.login-verify.com
+          </div>
+          <span class="text-alert-red text-xs font-bold">● UNSAFE</span>
+        </div>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block font-mono">Email Address</label>
+            <div class="field-danger w-full bg-ghost-slate rounded-lg px-4 py-3 text-sm text-slate-300 border-2 border-alert-red font-mono">
+              user@example.com
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block font-mono">Password</label>
+            <div class="field-danger w-full bg-ghost-slate rounded-lg px-4 py-3 text-sm text-slate-400 border-2 border-alert-red font-mono">
+              ••••••••••••
+            </div>
+          </div>
+          <!-- Warning overlay -->
+          <div class="flex items-start gap-3 bg-alert-red bg-opacity-10 border border-alert-red border-opacity-40 rounded-lg px-4 py-3">
+            <span class="text-alert-red text-lg leading-none">⚠</span>
+            <div>
+              <p class="text-alert-red text-xs font-bold">Ghost Form: Unverified domain</p>
+              <p class="text-slate-400 text-xs mt-0.5">High phishing similarity detected. Do not enter your password.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FEATURES
+  ============================================================ -->
+  <section id="features" class="py-24 px-4 sm:px-6 max-w-7xl mx-auto">
+    <div class="text-center mb-16">
+      <p class="tag-mono text-neon-green mb-4 tracking-widest">WHY GHOST FORM</p>
+      <h2 class="text-4xl sm:text-5xl font-bold text-white">Built Different. Built Private.</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+      <!-- Feature 1 -->
+      <div class="card-glow rounded-2xl p-7 hover:scale-[1.02] transition-transform duration-300">
+        <div class="w-12 h-12 rounded-xl bg-neon-glow border border-neon-green border-opacity-30 flex items-center justify-center text-2xl mb-5">🧠</div>
+        <h3 class="text-xl font-bold text-white mb-3">On-Device ML</h3>
+        <p class="text-slate-400 leading-relaxed text-sm">
+          A quantized transformer model runs entirely in your browser via WebAssembly. No cloud inference. No data ever leaves your machine.
+        </p>
+      </div>
+
+      <!-- Feature 2 -->
+      <div class="card-glow rounded-2xl p-7 hover:scale-[1.02] transition-transform duration-300">
+        <div class="w-12 h-12 rounded-xl bg-red-900 bg-opacity-30 border border-alert-red border-opacity-30 flex items-center justify-center text-2xl mb-5">🎭</div>
+        <h3 class="text-xl font-bold text-white mb-3">Zero-Day Detection</h3>
+        <p class="text-slate-400 leading-relaxed text-sm">
+          Blacklists fail against brand-new phishing domains. Ghost Form uses semantic similarity — it detects fake PayPal pages even if they're 10 seconds old.
+        </p>
+      </div>
+
+      <!-- Feature 3 -->
+      <div class="card-glow rounded-2xl p-7 hover:scale-[1.02] transition-transform duration-300">
+        <div class="w-12 h-12 rounded-xl bg-blue-900 bg-opacity-30 border border-blue-500 border-opacity-30 flex items-center justify-center text-2xl mb-5">🔍</div>
+        <h3 class="text-xl font-bold text-white mb-3">Shadow DOM Aware</h3>
+        <p class="text-slate-400 leading-relaxed text-sm">
+          Modern phishing kits hide inputs inside Shadow DOMs and iframes. Ghost Form penetrates both, attaching listeners where other extensions go blind.
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================================================
+       HOW IT WORKS
+  ============================================================ -->
+  <section id="how-it-works" class="py-24 px-4 sm:px-6" style="background: rgba(13, 20, 32, 0.8);">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <p class="tag-mono text-neon-green mb-4 tracking-widest">THE PROCESS</p>
+        <h2 class="text-4xl sm:text-5xl font-bold text-white">Three Steps. Instant Protection.</h2>
+        <p class="text-slate-400 mt-4 max-w-xl mx-auto">Everything happens in milliseconds, entirely on your device.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+
+        <!-- Step 1 -->
+        <div class="relative text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 mx-auto border-2 border-neon-green bg-neon-glow text-2xl">
+            🔬
+          </div>
+          <div class="tag-mono text-neon-green text-xs mb-2 tracking-widest">STEP 01</div>
+          <h3 class="text-xl font-bold text-white mb-3">Semantic Analysis</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            The ML model embeds the page's text and URL into a 384-dimensional vector. It computes cosine similarity against known brand signatures like PayPal, Google, and Amazon — all locally.
+          </p>
+        </div>
+
+        <!-- Divider -->
+        <div class="hidden md:flex items-start justify-center pt-8">
+          <svg class="w-full h-1 text-ghost-border mt-8" viewBox="0 0 100 2">
+            <line x1="0" y1="1" x2="100" y2="1" stroke="currentColor" stroke-dasharray="4 3"/>
+          </svg>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="relative text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 mx-auto border-2 border-alert-orange bg-orange-900 bg-opacity-20 text-2xl">
+            🚦
+          </div>
+          <div class="tag-mono text-alert-orange text-xs mb-2 tracking-widest">STEP 02</div>
+          <h3 class="text-xl font-bold text-white mb-3">Trust Indicators</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            Form fields get color-coded trust states — <span class="text-neon-green font-semibold">Green (Verified)</span>, <span class="text-alert-yellow font-semibold">Yellow (Unknown)</span>, or <span class="text-alert-red font-semibold">Red (Unsafe)</span> — before you type anything sensitive.
+          </p>
+        </div>
+
+        <!-- Divider -->
+        <div class="hidden md:flex items-start justify-center pt-8">
+          <svg class="w-full h-1 text-ghost-border mt-8" viewBox="0 0 100 2">
+            <line x1="0" y1="1" x2="100" y2="1" stroke="currentColor" stroke-dasharray="4 3"/>
+          </svg>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="relative text-center">
+          <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-6 mx-auto border-2 border-blue-400 bg-blue-900 bg-opacity-20 text-2xl">
+            🔒
+          </div>
+          <div class="tag-mono text-blue-400 text-xs mb-2 tracking-widest">STEP 03</div>
+          <h3 class="text-xl font-bold text-white mb-3">Data Stays Local</h3>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            The regex engine that detects credit card formats and password patterns runs entirely in memory. Zero keystrokes are transmitted. Zero form data is stored. 
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PRIVACY GUARANTEE
+  ============================================================ -->
+  <section id="privacy" class="py-24 px-4 sm:px-6 relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none"
+         style="background: radial-gradient(ellipse 50% 60% at 50% 100%, rgba(0,255,136,0.05) 0%, transparent 70%);"></div>
+    <div class="max-w-5xl mx-auto relative">
+
+      <div class="card-glow rounded-3xl p-10 sm:p-16 text-center">
+        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full border-2 border-neon-green bg-neon-glow mb-8 mx-auto text-4xl">
+          🛡️
+        </div>
+
+        <p class="tag-mono text-neon-green mb-4 tracking-widest">OUR PROMISE</p>
+        <h2 class="text-4xl sm:text-5xl font-black text-white mb-6">
+          Zero-Knowledge.<br/><span class="gradient-text">Guaranteed.</span>
+        </h2>
+        <p class="text-slate-300 text-lg leading-relaxed max-w-2xl mx-auto mb-12">
+          Ghost Form was designed from day one with a single non-negotiable rule:
+          <strong class="text-white">your data is yours, forever.</strong>
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+          <div class="bg-ghost-slate rounded-2xl p-6 border border-ghost-border">
+            <div class="text-3xl mb-3">🚫</div>
+            <h4 class="font-bold text-white mb-2">No Keystroke Logging</h4>
+            <p class="text-slate-400 text-sm">What you type is evaluated locally in memory and immediately discarded.</p>
+          </div>
+          <div class="bg-ghost-slate rounded-2xl p-6 border border-ghost-border">
+            <div class="text-3xl mb-3">🔌</div>
+            <h4 class="font-bold text-white mb-2">No External API Calls</h4>
+            <p class="text-slate-400 text-sm">The ML model runs via WebAssembly in your browser. No cloud inference.</p>
+          </div>
+          <div class="bg-ghost-slate rounded-2xl p-6 border border-ghost-border">
+            <div class="text-3xl mb-3">🌐</div>
+            <h4 class="font-bold text-white mb-2">No Browsing History</h4>
+            <p class="text-slate-400 text-sm">Only the current domain name is checked. Your history is never read or stored.</p>
+          </div>
+        </div>
+
+        <!-- Trust code snippet -->
+        <div class="bg-ghost-black rounded-xl p-5 text-left font-mono text-sm border border-ghost-border max-w-xl mx-auto">
+          <p class="text-slate-500 mb-1">// content.js — Ghost Form source</p>
+          <p class="text-slate-300"><span class="text-neon-green">const</span> evaluated = <span class="text-blue-400">detectSensitivePattern</span>(typedValue);</p>
+          <p class="text-slate-300"><span class="text-slate-500">// Only the pattern type is checked, never the value</span></p>
+          <p class="text-slate-300"><span class="text-neon-green">if</span> (evaluated) <span class="text-blue-400">showWarning</span>();</p>
+          <p class="text-slate-300 mt-1"><span class="text-slate-500">// typedValue is never stored or transmitted</span></p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       CTA BANNER
+  ============================================================ -->
+  <section class="py-20 px-4 sm:px-6" style="background: rgba(13, 20, 32, 0.9);">
+    <div class="max-w-3xl mx-auto text-center">
+      <h2 class="text-4xl sm:text-5xl font-black text-white mb-6">
+        Ready to Browse<br/><span class="gradient-text">Without Fear?</span>
+      </h2>
+      <p class="text-slate-400 text-lg mb-10">Free. Open source. No account required.</p>
+      <a href="#"
+         class="btn-primary inline-block px-10 py-4 rounded-xl font-bold text-ghost-black text-lg">
+        🛡️ Install Ghost Form for Free
+      </a>
+      <p class="text-slate-600 text-sm mt-5">Works on Chrome, Brave, and Edge · Manifest V3</p>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       FOOTER
+  ============================================================ -->
+  <footer class="border-t border-ghost-border py-12 px-4 sm:px-6" style="background: #080c14;">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+
+        <!-- Logo -->
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm text-ghost-black"
+               style="background: linear-gradient(135deg, #00ff88, #00ccaa);">
+            GF
+          </div>
+          <span class="font-bold text-white">Ghost Form</span>
+        </div>
+
+        <!-- Links -->
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500">
+          <a href="#features"    class="hover:text-neon-green transition-colors">Features</a>
+          <a href="#privacy"     class="hover:text-neon-green transition-colors">Privacy</a>
+          <a href="PRIVACY_POLICY.md" class="hover:text-neon-green transition-colors">Privacy Policy</a>
+          <a href="mailto:contact@ghostform.dev" class="hover:text-neon-green transition-colors">Contact</a>
+          <a href="https://github.com/radhika143789/Ghost-Form" target="_blank" rel="noopener"
+             class="hover:text-neon-green transition-colors">GitHub ↗</a>
+        </div>
+
+        <!-- Copyright -->
+        <p class="text-slate-600 text-sm">
+          © 2026 Ghost Form. All rights reserved.
+        </p>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Mobile menu toggle
+    const hamburger = document.getElementById('hamburger');
+    const mobileMenu = document.getElementById('mobile-menu');
+    hamburger.addEventListener('click', () => {
+      mobileMenu.classList.toggle('open');
+    });
+
+    // Close mobile menu on link click
+    mobileMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => mobileMenu.classList.remove('open'));
+    });
+
+    // Smooth scroll offset for fixed navbar
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          e.preventDefault();
+          const offset = 72;
+          const top = target.getBoundingClientRect().top + window.scrollY - offset;
+          window.scrollTo({ top, behavior: 'smooth' });
+        }
+      });
+    });
+  </script>
+</body>
+</html>

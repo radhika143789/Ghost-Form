@@ -49,6 +49,108 @@ function debounce(func, wait) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// DOM Sanitizer — safe text extraction for ML model input
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts clean, sanitized visible text from the page for ML analysis.
+ *
+ * Security properties:
+ *  - Clones the body to avoid mutating the live DOM.
+ *  - Strips <script>, <style>, <noscript>, and <svg> tags entirely.
+ *  - Skips elements that are hidden (display:none, visibility:hidden, opacity:0).
+ *  - Collapses whitespace to prevent padding attacks.
+ *  - HARD CAP: Truncates to 2,000 characters to prevent Memory Exhaustion
+ *    DoS attacks where an attacker injects massive amounts of text to
+ *    overwhelm the local ONNX embedding model.
+ *
+ * @param {Element} [root=document.body] - The root element to extract from.
+ * @returns {string} Sanitized, truncated plain text.
+ */
+function safeExtractText(root = document.body) {
+  const MAX_CHARS = 2000;
+
+  if (!root) return '';
+
+  // 1. Clone so we can safely mutate without touching the live page
+  const clone = root.cloneNode(true);
+
+  // 2. Remove all tags that never contain user-visible text
+  const STRIP_TAGS = ['script', 'style', 'noscript', 'svg', 'iframe', 'canvas', 'video', 'audio'];
+  STRIP_TAGS.forEach(tag => {
+    clone.querySelectorAll(tag).forEach(el => el.remove());
+  });
+
+  // 3. Remove visually hidden elements to exclude honeypots and cloaked content
+  clone.querySelectorAll('*').forEach(el => {
+    try {
+      const style = window.getComputedStyle(el);
+      if (
+        style.display === 'none' ||
+        style.visibility === 'hidden' ||
+        style.opacity === '0' ||
+        el.getAttribute('aria-hidden') === 'true' ||
+        el.hasAttribute('hidden')
+      ) {
+        el.remove();
+      }
+    } catch (_) {
+      // Ignore cross-origin or detached element errors
+    }
+  });
+
+  // 4. Extract raw text and collapse whitespace
+  const rawText = (clone.innerText || clone.textContent || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 5. HARD CAP — truncate to prevent ML model memory exhaustion
+  return rawText.slice(0, MAX_CHARS);
+}
+
+// ---------------------------------------------------------------------------
+// ML Page Analysis — fires once on page load (not on every keystroke)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sends sanitized page text to the background service worker for ML analysis.
+ * Uses a one-shot flag to ensure we only run this once per page load,
+ * regardless of how many times the content script initializes.
+ */
+(function triggerMLAnalysis() {
+  // Avoid re-running on the same page (e.g., after SPA route changes without full reload)
+  if (sessionStorage.getItem(`ghost-form-ml-analyzed-${window.location.hostname}`)) return;
+  sessionStorage.setItem(`ghost-form-ml-analyzed-${window.location.hostname}`, '1');
+
+  // Wait for the DOM to be fully painted before extracting text
+  const run = () => {
+    const sanitizedText = safeExtractText(document.body);
+    if (!sanitizedText || sanitizedText.length < 20) return; // Not enough text to be meaningful
+
+    chrome.runtime.sendMessage(
+      {
+        action: 'ANALYZE_PAGE',
+        text: sanitizedText,
+        hostname: window.location.hostname,
+      },
+      (response) => {
+        if (chrome.runtime.lastError) return; // Service worker may not be ready yet
+        if (response && response.status) {
+          currentStatus = response.status;
+        }
+      }
+    );
+  };
+
+  // Defer slightly to let the page render its visible content first
+  if (document.readyState === 'complete') {
+    setTimeout(run, 500);
+  } else {
+    window.addEventListener('load', () => setTimeout(run, 500), { once: true });
+  }
+})();
+
 // --- Warning Logic ---
 function showWarning(inputElement) {
   if (isIgnored() || inputElement.hasAttribute("data-ghost-form-active")) return;

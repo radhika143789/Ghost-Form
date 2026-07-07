@@ -1,0 +1,5 @@
+{
+  "transform": {},
+  "testEnvironment": "node",
+  "setupFiles": ["jest-chrome/setup"]
+}

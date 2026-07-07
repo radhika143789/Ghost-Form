@@ -64,6 +64,11 @@ h1 {
   box-shadow: 0 0 24px rgba(16, 185, 129, 0.15);
 }
 
+.status-card.unknown {
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow: 0 0 24px rgba(251, 191, 36, 0.15);
+}
+
 .status-card.unsafe {
   border-color: rgba(239, 68, 68, 0.4);
   box-shadow: 0 0 24px rgba(239, 68, 68, 0.15);
@@ -90,6 +95,17 @@ h1 {
   font-weight: bold;
 }
 
+.status-card.unknown .status-icon {
+  background-color: rgba(251, 191, 36, 0.2);
+}
+
+.status-card.unknown .status-icon::after {
+  content: "?";
+  color: #fbbf24;
+  font-size: 32px;
+  font-weight: bold;
+}
+
 .status-card.unsafe .status-icon {
   background-color: rgba(239, 68, 68, 0.2);
 }
@@ -107,13 +123,9 @@ h1 {
   font-weight: 700;
 }
 
-.status-card.safe #statusTitle {
-  color: var(--safe-color);
-}
-
-.status-card.unsafe #statusTitle {
-  color: var(--unsafe-color);
-}
+.status-card.safe #statusTitle    { color: var(--safe-color); }
+.status-card.unknown #statusTitle { color: #fbbf24; }
+.status-card.unsafe #statusTitle  { color: var(--unsafe-color); }
 
 #statusDesc {
   margin: 0;

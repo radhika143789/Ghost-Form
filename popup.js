@@ -34,14 +34,18 @@ function updateUI(status) {
   const card = document.getElementById("statusCard");
   const title = document.getElementById("statusTitle");
   const desc = document.getElementById("statusDesc");
-  
+
   if (status === "safe") {
     card.className = "status-card safe";
     title.textContent = "Verified Domain";
     desc.textContent = "This website is recognized as safe. You may enter sensitive information.";
+  } else if (status === "unknown") {
+    card.className = "status-card unknown";
+    title.textContent = "Unverified Domain";
+    desc.textContent = "Ghost Form hasn't verified this site. Avoid entering passwords or card details.";
   } else {
     card.className = "status-card unsafe";
-    title.textContent = "Unsafe / Unknown";
-    desc.textContent = "Ghost Form has flagged this site. Do NOT enter passwords or PII here.";
+    title.textContent = "Unsafe — Phishing Risk";
+    desc.textContent = "Ghost Form's ML model flagged this site as high risk. Do NOT enter any credentials.";
   }
 }

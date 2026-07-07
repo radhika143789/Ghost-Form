@@ -1,17 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Ghost Form",
-  "version": "2.0.0",
-  "description": "Prevents users from accidentally typing sensitive data into forms on phishing or unverified websites.",
+  "version": "3.0.0",
+  "description": "Privacy-first anti-phishing extension with on-device machine learning for zero-day detection.",
   "permissions": [
     "activeTab",
-    "storage"
+    "tabs",
+    "storage",
+    "offscreen",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "dist/background.js",
+    "type": "module"
   },
   "content_scripts": [
     {
@@ -30,7 +34,18 @@
     "page": "options.html",
     "open_in_tab": true
   },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dist/ml_worker.js",
+        "dist/*.wasm",
+        "dist/*.ort",
+        "models/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://ghost-form-proxy.yourdomain.workers.dev"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; worker-src 'self'; connect-src 'self' https://ghost-form-proxy.yourdomain.workers.dev https://huggingface.co https://cdn-lfs.huggingface.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'; default-src 'none'"
   }
 }

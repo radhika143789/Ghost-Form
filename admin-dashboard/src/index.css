@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #080c14;
+  color: #f1f5f9;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar styling for the dark theme */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0d1420; }
+::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2d4060; }
+
+/* Neon green glow utility */
+.neon-glow {
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+}
+
+.card-glass {
+  background: rgba(20, 30, 48, 0.8);
+  border: 1px solid rgba(30, 45, 69, 0.8);
+  backdrop-filter: blur(12px);
+}
