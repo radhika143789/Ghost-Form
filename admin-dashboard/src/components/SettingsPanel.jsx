@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
-import { Save, User, Key, CheckCircle } from 'lucide-react'
+import { Save, User, Key, CheckCircle, AlertCircle } from 'lucide-react'
 
 export default function SettingsPanel() {
   const [user,    setUser]    = useState(null)
   const [saved,   setSaved]   = useState(false)
   const [loading, setLoading] = useState(false)
+  // High #4: Replace both alert() calls with an inline error state.
+  // alert() blocks the browser event loop, breaks dark-mode UX, and
+  // is especially jarring inside a polished admin dashboard.
+  const [formError, setFormError] = useState(null)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data?.user ?? null))
@@ -13,15 +17,31 @@ export default function SettingsPanel() {
 
   async function handlePasswordChange(e) {
     e.preventDefault()
+    setFormError(null) // clear previous errors on each attempt
+
     const newPassword = e.target.password.value
-    if (newPassword.length < 8) return alert('Password must be at least 8 characters.')
+
+    // HTML5 minLength already enforces this visually, but we guard here too
+    // so the server is never called with a trivially short password.
+    if (newPassword.length < 8) {
+      setFormError('Password must be at least 8 characters.')
+      return
+    }
+
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(false)
+
     if (error) {
-      alert(error.message)
+      // Normalize common Supabase auth error messages into user-friendly copy
+      if (error.message.toLowerCase().includes('same password')) {
+        setFormError('New password must be different from your current password.')
+      } else {
+        setFormError(error.message)
+      }
     } else {
       setSaved(true)
+      setFormError(null)
       e.target.reset()
       setTimeout(() => setSaved(false), 3000)
     }
@@ -75,6 +95,15 @@ export default function SettingsPanel() {
                          transition-colors duration-200"
             />
           </div>
+
+          {/* Inline error — replaces both alert() calls (High #4) */}
+          {formError && (
+            <div className="flex items-start gap-2.5 bg-red-900/20 border border-red-500/30 rounded-xl px-4 py-3">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+              <p className="text-red-400 text-sm leading-snug">{formError}</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={loading}

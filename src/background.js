@@ -156,20 +156,36 @@ function interpretMLResults(results) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Domain Whitelist & Session Cache (Phase 2 carry-forward)
+// 3. Domain Whitelist & Session Cache
 // ---------------------------------------------------------------------------
 
+// High #9: In-memory whitelist cache — avoids O(n) cold chrome.storage.local I/O
+// on every single page load. The Set gives O(1) lookups instead of O(n) array scans.
+// Populated lazily on first use; invalidated immediately by chrome.storage.onChanged.
+/** @type {Set<string>|null} */
+let _whitelistCache = null;
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.userWhitelist) {
+    _whitelistCache = new Set(changes.userWhitelist.newValue ?? []);
+    console.log('[GhostForm] Whitelist cache refreshed:', _whitelistCache.size, 'entries');
+  }
+});
+
 async function isDomainWhitelisted(hostname) {
-  return new Promise((resolve) => {
-    chrome.storage.local.get({ userWhitelist: [] }, (result) => {
-      resolve(result.userWhitelist.includes(hostname));
-    });
-  });
+  if (!_whitelistCache) {
+    // First call: load from storage and prime the cache
+    const result = await chrome.storage.local.get({ userWhitelist: [] });
+    _whitelistCache = new Set(result.userWhitelist);
+  }
+  return _whitelistCache.has(hostname); // O(1)
 }
 
 async function getSessionCache(key) {
   const result = await chrome.storage.session.get([key]);
-  return result[key] || null;
+  // High #5: Use ?? not || — || coerces falsy values (0, false, '') to null,
+  // causing a cache miss even when a valid falsy result was intentionally stored.
+  return result[key] ?? null;
 }
 
 async function setSessionCache(key, value) {
@@ -184,7 +200,13 @@ async function checkDomainStatus(urlString) {
   try {
     const url = new URL(urlString);
 
-    if (url.protocol === 'chrome:' || url.protocol === 'chrome-extension:') {
+    // High #8: Expanded internal protocol set. The previous check only covered
+    // chrome:// and chrome-extension://. about:blank, data:, and blob: URLs
+    // are also browser-internal and should never be analyzed for phishing.
+    const INTERNAL_PROTOCOLS = new Set([
+      'chrome:', 'chrome-extension:', 'about:', 'data:', 'blob:', 'devtools:'
+    ]);
+    if (INTERNAL_PROTOCOLS.has(url.protocol)) {
       return { status: 'safe', source: 'internal' };
     }
 

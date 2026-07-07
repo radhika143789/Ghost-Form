@@ -5,6 +5,13 @@ const ignoredSessionKey = `ghost-form-ignore-${window.location.hostname}`;
 chrome.runtime.sendMessage(
   { action: "checkStatus", url: window.location.href },
   (response) => {
+    // High #10: Missing lastError check. On cold service worker start, this callback
+    // might fire with lastError set and response undefined, swallowing the error.
+    if (chrome.runtime.lastError) {
+      console.warn('[GhostForm] Initial status check failed:', chrome.runtime.lastError.message);
+      currentStatus = 'unknown'; // Conservative: don't assume safe on error
+      return;
+    }
     if (response && response.status) {
       currentStatus = response.status;
     }
@@ -178,12 +185,32 @@ function showWarning(inputElement) {
   };
   warningMsg.appendChild(ignoreBtn);
   
-  const rect = inputElement.getBoundingClientRect();
-  warningMsg.style.top = `${window.scrollY + rect.bottom + 8}px`;
-  warningMsg.style.left = `${window.scrollX + rect.left}px`;
-  
   document.body.appendChild(warningMsg);
   inputElement.ghostFormWarningElement = warningMsg;
+
+  const updatePosition = () => {
+    // Clean up if warning was removed, or if the input was removed from the DOM
+    if (!inputElement.ghostFormWarningElement || !inputElement.isConnected) {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+      if (inputElement.ghostFormWarningElement) {
+        removeWarning(inputElement);
+      }
+      return;
+    }
+    const currentRect = inputElement.getBoundingClientRect();
+    warningMsg.style.top = `${window.scrollY + currentRect.bottom + 8}px`;
+    warningMsg.style.left = `${window.scrollX + currentRect.left}px`;
+  };
+
+  // Initial position
+  updatePosition();
+
+  // High #7: Fix warning overlay drift on scroll/resize.
+  // Add listeners (capture phase for scroll to catch inner containers) to keep
+  // the overlay glued to the input field, since we removed the handleBlur cleanup.
+  window.addEventListener('scroll', updatePosition, true);
+  window.addEventListener('resize', updatePosition);
 }
 
 function removeWarning(inputElement) {
