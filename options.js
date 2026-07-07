@@ -13,10 +13,18 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { statusMsg.style.display = 'none'; }, 3000);
   }
 
-  // Fix #10: Validate that input is a proper hostname (e.g. "google.com")
-  // Rejects full URLs, IPs with ports, spaces, glob patterns, etc.
+  // Medium #16: Validate that input is a proper hostname.
+  // Allows:
+  //   - Standard multi-label domains: google.com, sub.domain.co.uk
+  //   - localhost (common for dev environments)
+  //   - Single-label intranet names: jenkins, gitlab, intranet
+  // Rejects: full URLs (http://...), ports, spaces, glob patterns, IPs with ports.
   function isValidHostname(hostname) {
-    // Must be a valid domain: letters, digits, hyphens, dots only
+    // Special case: localhost is always valid
+    if (hostname === 'localhost') return true;
+    // Single-label intranet hostname (no dots, letters/digits/hyphens only, e.g. 'jenkins')
+    if (/^[a-z0-9][a-z0-9-]{0,61}[a-z0-9]?$/.test(hostname)) return true;
+    // Standard multi-label domain: must end with a valid TLD (2+ letters)
     return /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname);
   }
 

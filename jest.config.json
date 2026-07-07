@@ -1,5 +1,16 @@
 {
-  "transform": {},
   "testEnvironment": "node",
-  "setupFiles": ["jest-chrome/setup"]
+  "transform": {
+    "^.+\\.js$": "babel-jest"
+  },
+  "setupFiles": [
+    "jest-chrome/setup"
+  ],
+  "testMatch": [
+    "**/__tests__/**/*.test.js",
+    "**/*.test.js"
+  ],
+  "moduleNameMapper": {
+    "^@xenova/transformers$": "<rootDir>/__mocks__/@xenova/transformers.js"
+  }
 }

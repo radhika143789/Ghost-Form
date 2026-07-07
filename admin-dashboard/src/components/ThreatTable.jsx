@@ -13,11 +13,22 @@ function ThreatBadge({ level }) {
       </span>
     )
   }
+  if (level === 'Yellow') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+                       bg-yellow-400/15 text-yellow-400 border border-yellow-400/25">
+        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+        Yellow — Suspicious
+      </span>
+    )
+  }
+  // Medium #13: Neutral fallback for unexpected or null threat_level values.
+  // Previously any non-Red value (including null) showed as Yellow which is misleading.
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
-                     bg-yellow-400/15 text-yellow-400 border border-yellow-400/25">
-      <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-      Yellow — Suspicious
+                     bg-slate-700/40 text-slate-400 border border-slate-600/40">
+      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+      {level ?? 'Unknown'}
     </span>
   )
 }

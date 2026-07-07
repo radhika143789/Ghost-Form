@@ -8,7 +8,10 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     target: 'esnext',
-    minify: false, // Keep readable for extension review & debugging
+    // Minify in production for smaller install size and harder-to-reverse-engineer
+    // detection logic. Use sourcemaps for debugging instead of raw source.
+    minify: process.env.NODE_ENV === 'production' ? 'esbuild' : false,
+    sourcemap: process.env.NODE_ENV !== 'production',
 
     rollupOptions: {
       input: {

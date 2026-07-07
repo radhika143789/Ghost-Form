@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import { ShieldAlert, ShieldX, ShieldCheck, RefreshCw } from 'lucide-react'
 import ThreatTable from './ThreatTable'
@@ -42,38 +42,47 @@ export default function Overview() {
   const [page,       setPage]       = useState(0)
   const PAGE_SIZE = 20
 
-  async function fetchData(currentPage = 0, signal) {
+  // useCallback gives fetchData a stable reference so it can safely be
+  // listed as a dependency in useEffect without triggering infinite loops.
+  const fetchData = useCallback(async (currentPage = 0, signal) => {
     setLoading(true)
     setError(null)
 
     const from = currentPage * PAGE_SIZE
     const to   = from + PAGE_SIZE - 1
 
-    // Fix #17: Check for abort before setting state
-    if (signal?.aborted) return;
+    try {
+      // Abort guard: component may have unmounted before we even started
+      if (signal?.aborted) return
 
-    // Fix #12: Fetch the true total count alongside the page rows
-    const [pageResult, countResult] = await Promise.all([
-      supabase
-        .from('threat_telemetry')
-        .select('id, created_at, domain_flagged, threat_level, detection_method')
-        .order('created_at', { ascending: false })
-        .range(from, to),
-      supabase
-        .from('threat_telemetry')
-        .select('*', { count: 'exact', head: true }),
-    ])
+      // Fetch page rows + true total count in one round-trip
+      const [pageResult, countResult] = await Promise.all([
+        supabase
+          .from('threat_telemetry')
+          .select('id, created_at, domain_flagged, threat_level, detection_method')
+          .order('created_at', { ascending: false })
+          .range(from, to),
+        supabase
+          .from('threat_telemetry')
+          .select('*', { count: 'exact', head: true }),
+      ])
 
-    if (signal?.aborted) return; // Fix #17: Component may have unmounted while awaiting
+      // Abort guard: component may have unmounted while awaiting network
+      if (signal?.aborted) return
 
-    if (pageResult.error) {
-      setError(pageResult.error.message)
-    } else {
-      setRows(pageResult.data ?? [])
-      setTotalCount(countResult.count ?? 0)
+      if (pageResult.error) {
+        setError(pageResult.error.message)
+      } else {
+        setRows(pageResult.data ?? [])
+        setTotalCount(countResult.count ?? 0)
+      }
+    } finally {
+      // Medium #12: Always clear the loading spinner, even on the abort path.
+      // Without this, a Refresh button click that gets aborted leaves the UI
+      // in a permanent loading state.
+      if (!signal?.aborted) setLoading(false)
     }
-    setLoading(false)
-  }
+  }, []) // stable — no external state dependencies
 
   useEffect(() => {
     // Fix #17: AbortController so in-flight fetch is cancelled on unmount
@@ -118,7 +127,12 @@ export default function Overview() {
           </p>
         </div>
         <button
-          onClick={() => fetchData(page)}
+          onClick={() => {
+            // Thread a new AbortController through manual refreshes so they
+            // are also cancellable (e.g. if the component unmounts mid-click)
+            const ctrl = new AbortController()
+            fetchData(page, ctrl.signal)
+          }}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium
                      text-slate-400 border border-ghost-border hover:text-white hover:border-neon-green/40

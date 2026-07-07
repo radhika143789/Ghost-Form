@@ -1,13 +1,15 @@
 /**
  * background.js — Ghost Form Phase 3
- * 
+ *
  * This is the main service worker. Its key Phase 3 responsibilities are:
  *  1. Spawning and managing the ML Web Worker (ml_worker.js).
  *  2. Routing ANALYZE requests from content.js to the ML Worker.
- *  3. Maintaining the API proxy fallback (from Phase 2) as a secondary check.
+ *  3. Maintaining a session-level result cache to avoid redundant ML inference.
  *  4. Recovering worker state gracefully after MV3 service worker suspension.
+ *
+ * Note: The Phase 2 API proxy fallback (THREAT_API_ENDPOINT) has been removed
+ * in Phase 3. Detection is now fully on-device via the ML worker.
  */
-
 
 // ---------------------------------------------------------------------------
 // 1. ML Worker Management
