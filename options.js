@@ -3,24 +3,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBtn = document.getElementById('addBtn');
   const whitelistEl = document.getElementById('whitelist');
 
+  // Inline error/message display element (replaces alert())
+  const statusMsg = document.getElementById('statusMsg');
+
+  function showStatus(text, isError = false) {
+    statusMsg.textContent = text;
+    statusMsg.style.color = isError ? '#f87171' : '#4ade80';
+    statusMsg.style.display = 'block';
+    setTimeout(() => { statusMsg.style.display = 'none'; }, 3000);
+  }
+
+  // Fix #10: Validate that input is a proper hostname (e.g. "google.com")
+  // Rejects full URLs, IPs with ports, spaces, glob patterns, etc.
+  function isValidHostname(hostname) {
+    // Must be a valid domain: letters, digits, hyphens, dots only
+    return /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(hostname);
+  }
+
   // Load whitelist on open
   loadWhitelist();
 
   // Add domain on button click
   addBtn.addEventListener('click', () => {
-    const domain = domainInput.value.trim().toLowerCase();
-    if (domain) {
-      addDomain(domain);
-    }
+    const raw = domainInput.value.trim().toLowerCase();
+    if (raw) addDomain(raw);
   });
 
   // Add domain on Enter key press
   domainInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      const domain = domainInput.value.trim().toLowerCase();
-      if (domain) {
-        addDomain(domain);
-      }
+      const raw = domainInput.value.trim().toLowerCase();
+      if (raw) addDomain(raw);
     }
   });
 
@@ -31,6 +44,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function addDomain(domain) {
+    // Strip protocol prefix if user pasted a full URL
+    domain = domain.replace(/^https?:\/\//i, '').split('/')[0];
+
+    // Fix #10: Validate before adding
+    if (!isValidHostname(domain)) {
+      showStatus(`"${domain}" is not a valid hostname. Example: google.com`, true);
+      return;
+    }
+
     chrome.storage.local.get({ userWhitelist: [] }, (result) => {
       const list = result.userWhitelist;
       if (!list.includes(domain)) {
@@ -38,9 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.storage.local.set({ userWhitelist: list }, () => {
           domainInput.value = '';
           renderList(list);
+          // Fix #9: Inline success message instead of alert()
+          showStatus(`✓ "${domain}" added to whitelist.`);
         });
       } else {
-        alert('Domain is already whitelisted.');
+        // Fix #9: Inline error message instead of alert()
+        showStatus(`"${domain}" is already whitelisted.`, true);
       }
     });
   }
@@ -50,13 +75,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const list = result.userWhitelist.filter(item => item !== domain);
       chrome.storage.local.set({ userWhitelist: list }, () => {
         renderList(list);
+        showStatus(`"${domain}" removed.`);
       });
     });
   }
 
   function renderList(list) {
     whitelistEl.innerHTML = '';
-    
+
     if (list.length === 0) {
       const li = document.createElement('li');
       li.textContent = 'No domains whitelisted yet.';
@@ -67,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     list.forEach(domain => {
       const li = document.createElement('li');
-      
+
       const span = document.createElement('span');
       span.textContent = domain;
       li.appendChild(span);

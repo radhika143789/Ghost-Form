@@ -35,35 +35,50 @@ function StatsCard({ icon: Icon, label, value, color, loading }) {
 // Overview — main content panel
 // ─────────────────────────────────────────────────────────────
 export default function Overview() {
-  const [rows,    setRows]    = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState(null)
-  const [page,    setPage]    = useState(0)
+  const [rows,       setRows]       = useState([])
+  const [totalCount, setTotalCount] = useState(null)  // Fix #12: true total from DB count query
+  const [loading,    setLoading]    = useState(true)
+  const [error,      setError]      = useState(null)
+  const [page,       setPage]       = useState(0)
   const PAGE_SIZE = 20
 
-  async function fetchData(currentPage = 0) {
+  async function fetchData(currentPage = 0, signal) {
     setLoading(true)
     setError(null)
 
     const from = currentPage * PAGE_SIZE
     const to   = from + PAGE_SIZE - 1
 
-    const { data, error } = await supabase
-      .from('threat_telemetry')
-      .select('id, created_at, domain_flagged, threat_level, detection_method')
-      .order('created_at', { ascending: false })
-      .range(from, to)
+    // Fix #17: Check for abort before setting state
+    if (signal?.aborted) return;
 
-    if (error) {
-      setError(error.message)
+    // Fix #12: Fetch the true total count alongside the page rows
+    const [pageResult, countResult] = await Promise.all([
+      supabase
+        .from('threat_telemetry')
+        .select('id, created_at, domain_flagged, threat_level, detection_method')
+        .order('created_at', { ascending: false })
+        .range(from, to),
+      supabase
+        .from('threat_telemetry')
+        .select('*', { count: 'exact', head: true }),
+    ])
+
+    if (signal?.aborted) return; // Fix #17: Component may have unmounted while awaiting
+
+    if (pageResult.error) {
+      setError(pageResult.error.message)
     } else {
-      setRows(data ?? [])
+      setRows(pageResult.data ?? [])
+      setTotalCount(countResult.count ?? 0)
     }
     setLoading(false)
   }
 
   useEffect(() => {
-    fetchData(page)
+    // Fix #17: AbortController so in-flight fetch is cancelled on unmount
+    const controller = new AbortController()
+    fetchData(page, controller.signal)
 
     // Subscribe to real-time inserts so the table updates live
     const channel = supabase
@@ -74,16 +89,20 @@ export default function Overview() {
           // Prepend the new row only on the first page
           if (page === 0) {
             setRows(prev => [payload.new, ...prev].slice(0, PAGE_SIZE))
+            // Also bump the total count on new inserts
+            setTotalCount(prev => (prev ?? 0) + 1)
           }
         }
       )
       .subscribe()
 
-    return () => supabase.removeChannel(channel)
+    return () => {
+      controller.abort()
+      supabase.removeChannel(channel)
+    }
   }, [page])
 
-  // Derived stats from the loaded page + real-time data
-  const total  = rows.length
+  // Derived stats from the loaded page rows (Red/Yellow from current page)
   const red    = rows.filter(r => r.threat_level === 'Red').length
   const yellow = rows.filter(r => r.threat_level === 'Yellow').length
 
@@ -114,7 +133,7 @@ export default function Overview() {
         <StatsCard
           icon={ShieldCheck}
           label="Total Threats Blocked"
-          value={total}
+          value={totalCount}
           color="green"
           loading={loading}
         />

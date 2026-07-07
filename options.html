@@ -16,7 +16,10 @@
         <input type="text" id="domainInput" placeholder="e.g., internal-portal.company.com">
         <button id="addBtn">Add to Whitelist</button>
       </div>
-      
+
+      <!-- Inline status message (replaces alert() calls) -->
+      <p id="statusMsg" style="display:none; margin-top:8px; font-size:13px; font-weight:600; transition: all 0.2s;"></p>
+
       <ul id="whitelist" class="whitelist">
         <!-- Whitelisted domains will be listed here -->
       </ul>

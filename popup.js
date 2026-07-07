@@ -2,30 +2,44 @@ document.addEventListener("DOMContentLoaded", () => {
   // Query the currently active tab in the current window
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const activeTab = tabs[0];
-    
+
     if (activeTab && activeTab.url) {
       try {
         const url = new URL(activeTab.url);
+
+        // Internal browser pages (chrome://, about:, etc.) are always safe
+        if (url.protocol === "chrome:" || url.protocol === "chrome-extension:" || url.protocol === "about:") {
+          document.getElementById("currentDomain").textContent = url.hostname || activeTab.url;
+          updateUI("safe");
+          return;
+        }
+
         document.getElementById("currentDomain").textContent = url.hostname || activeTab.url;
-        
+
         // Ask background script for the domain trust status
         chrome.runtime.sendMessage(
           { action: "checkStatus", url: activeTab.url },
           (response) => {
-            if (response && response.status) {
-              updateUI(response.status);
-            } else {
-              updateUI("unsafe");
+            // Fix #14: Always check lastError before reading response.
+            // If the service worker is cold (just installed or suspended),
+            // lastError will be set and response will be undefined.
+            if (chrome.runtime.lastError) {
+              console.warn("[GhostForm Popup] Service worker not ready:", chrome.runtime.lastError.message);
+              updateUI("unknown");
+              return;
             }
+            updateUI(response?.status ?? "unknown");
           }
         );
       } catch (e) {
+        // URL parse error (e.g. edge case protocols) — not a phishing signal
         document.getElementById("currentDomain").textContent = activeTab.url;
-        updateUI("unsafe");
+        updateUI("unknown");
       }
     } else {
+      // No active tab or no URL (e.g. new tab page before URL loads)
       document.getElementById("currentDomain").textContent = "N/A";
-      updateUI("unsafe");
+      updateUI("unknown");
     }
   });
 });

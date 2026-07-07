@@ -15,7 +15,7 @@
 
 let mlWorker = null;
 const pendingRequests = new Map(); // id → { resolve, reject }
-let requestCounter = 0;
+// requestCounter replaced by crypto.randomUUID() — see sendToMLWorker
 
 /**
  * Lazily spawns the ML Worker. If the service worker was suspended by MV3
@@ -35,6 +35,14 @@ function getMLWorker() {
 
     if (type === 'STATUS' || type === 'MODEL_PROGRESS') {
       console.log(`[GhostForm ML] ${type}:`, payload);
+      return;
+    }
+
+    // Fix #2: Worker computed anchor embeddings for the first time \u2014 persist
+    // them in session storage so they survive the next service worker restart.
+    if (type === 'STORE_ANCHORS') {
+      chrome.storage.session.set({ __ghost_form_anchors__: payload });
+      console.log('[GhostForm] Anchor embeddings cached in session storage.');
       return;
     }
 
@@ -60,6 +68,19 @@ function getMLWorker() {
     mlWorker = null;
   };
 
+  // Fix #2: After spawning, try to restore previously-computed anchor embeddings
+  // from session storage. If found, inject them into the new worker so the first
+  // ANALYZE call doesn't have to re-compute all anchors from scratch.
+  chrome.storage.session.get(['__ghost_form_anchors__'], (result) => {
+    if (result.__ghost_form_anchors__) {
+      mlWorker.postMessage({
+        type: 'RESTORE_ANCHORS',
+        id: crypto.randomUUID(),
+        payload: result.__ghost_form_anchors__,
+      });
+    }
+  });
+
   return mlWorker;
 }
 
@@ -72,7 +93,8 @@ function getMLWorker() {
  */
 function sendToMLWorker(type, payload, timeoutMs = 30000) {
   return new Promise((resolve, reject) => {
-    const id = `req_${++requestCounter}`;
+    // Fix #16: crypto.randomUUID() is collision-proof and survives service worker restarts
+    const id = crypto.randomUUID();
     const worker = getMLWorker();
 
     // Timeout guard — ML inference can be slow on first run
@@ -262,8 +284,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const tabId = sender.tab ? sender.tab.id : -1;
 
     // ── Circuit Breaker ──────────────────────────────────────────────────────
-    // Enforce rate limit before touching the ML Worker.
-    // A tab flooding us with requests gets an immediate 'rate_limited' reply.
     if (!isRequestAllowed(tabId)) {
       console.warn(`[GhostForm] Rate limit exceeded for tab ${tabId}. Request dropped.`);
       sendResponse({
@@ -279,10 +299,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .then(async (results) => {
         const { status, topMatch } = interpretMLResults(results);
         const result = { status, topMatch, allScores: results, source: 'ml' };
-
-        // Cache the ML result for this hostname for the session
         await setSessionCache(`ml_status_${hostname}`, { status, topMatch });
-
         sendResponse(result);
       })
       .catch((err) => {
@@ -300,6 +317,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch((err) => sendResponse({ ready: false, error: err.message }));
     return true;
   }
+
+  // Fix #19: Unknown action fallback — prevents callers from hanging indefinitely
+  console.warn('[GhostForm] Unknown message action:', request.action);
+  sendResponse({ error: `Unknown action: ${request.action}` });
+  return false;
 });
 
 // Pre-warm the ML worker when the service worker starts

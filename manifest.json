@@ -11,7 +11,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "dist/background.js",
@@ -42,7 +43,7 @@
         "dist/*.ort",
         "models/*"
       ],
-      "matches": ["<all_urls>"]
+      "matches": ["chrome-extension://__MSG_@@extension_id__/*"]
     }
   ],
   "content_security_policy": {

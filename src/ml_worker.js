@@ -125,15 +125,36 @@ async function computeEmbedding(text) {
  * @param {string} pageText - Scraped visible text from the web page.
  * @returns {Promise<Array<{brand: string, score: number, label: string}>>}
  */
+/**
+ * Computes cosine similarity between the page text and all known brand anchors.
+ * Anchor embeddings are computed once and then stored back to background.js
+ * via a STORE_ANCHORS message so they can be persisted in session storage and
+ * survive MV3 service worker restarts.
+ * 
+ * @param {string} pageText - Scraped visible text from the web page.
+ * @returns {Promise<Array<{brand: string, score: number, label: string}>>}
+ */
 async function analyzePageText(pageText) {
-  const pipe = await getEmbeddingPipeline();
+  let anchorsComputed = false;
 
   // Generate anchor embeddings at runtime if they haven't been computed yet
-  // (this only runs once per session and is then stored on the anchor objects)
   for (const [key, anchor] of Object.entries(BRAND_ANCHORS)) {
     if (!anchor.embedding) {
       anchor.embedding = await computeEmbedding(anchor.anchorText);
+      anchorsComputed = true;
     }
+  }
+
+  // Fix #2: After computing anchors for the first time, send them back to
+  // background.js to be persisted in session storage. On the next service
+  // worker restart, background.js can restore them via RESTORE_ANCHORS,
+  // avoiding a full re-computation.
+  if (anchorsComputed) {
+    const serializableAnchors = {};
+    for (const [key, anchor] of Object.entries(BRAND_ANCHORS)) {
+      serializableAnchors[key] = Array.from(anchor.embedding);
+    }
+    postMessage({ type: 'STORE_ANCHORS', payload: serializableAnchors });
   }
 
   // Embed the incoming page text
@@ -183,6 +204,20 @@ self.onmessage = async (event) => {
       // Health check — wake up the worker and ensure the pipeline is ready
       await getEmbeddingPipeline();
       postMessage({ type: 'PONG', id });
+
+    } else if (type === 'RESTORE_ANCHORS') {
+      // Fix #2: Restore persisted anchor embeddings from session storage.
+      // background.js sends this on worker startup after loading from cache.
+      // This avoids re-computing all anchor embeddings on every service worker restart.
+      if (payload && typeof payload === 'object') {
+        for (const [key, floatArray] of Object.entries(payload)) {
+          if (BRAND_ANCHORS[key]) {
+            BRAND_ANCHORS[key].embedding = new Float32Array(floatArray);
+          }
+        }
+        console.log('[GhostForm ML Worker] Anchor embeddings restored from session cache.');
+      }
+      postMessage({ type: 'RESULT', id, payload: 'anchors_restored' });
     }
 
   } catch (error) {

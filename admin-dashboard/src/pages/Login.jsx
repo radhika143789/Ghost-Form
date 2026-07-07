@@ -24,9 +24,11 @@ export default function Login() {
       } else {
         setError(error.message)
       }
+      setLoading(false)
+      return
     }
-    // On success, App.jsx's onAuthStateChange listener handles the redirect
-    setLoading(false)
+    // On success, App.jsx's onAuthStateChange handles the redirect.
+    // This component will unmount — do NOT call setState after this point.
   }
 
   return (

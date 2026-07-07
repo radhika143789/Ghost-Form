@@ -41,10 +41,12 @@ function MethodBadge({ method }) {
 // ─────────────────────────────────────────────────────────────
 // Format ISO timestamp to readable local date + time
 // ─────────────────────────────────────────────────────────────
+// Fix #18: Use undefined locale to respect the browser/user's regional settings
+// instead of hardcoding 'en-IN' which formats dates in Indian style for all users.
 function formatDate(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
-  return d.toLocaleDateString('en-IN', {
+  return d.toLocaleDateString(undefined, {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true
   })
@@ -120,16 +122,24 @@ export default function ThreatTable({ rows, loading, page, setPage, PAGE_SIZE })
                     {formatDate(row.created_at)}
                   </td>
 
-                  {/* Domain */}
+                  {/* Domain — Fix #13: Do NOT link directly to flagged phishing sites.
+                      Direct links would: (a) alert the attacker they are being monitored,
+                      (b) expose the admin's IP. Use VirusTotal for safe investigation. */}
                   <td className="px-5 py-4">
-                    <a
-                      href={`https://${row.domain_flagged}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-slate-200 hover:text-neon-green flex items-center gap-1.5 transition-colors w-fit">
-                      {row.domain_flagged}
-                      <ExternalLink className="w-3 h-3 opacity-50" />
-                    </a>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-slate-200">
+                        {row.domain_flagged}
+                      </span>
+                      <a
+                        href={`https://www.virustotal.com/gui/domain/${encodeURIComponent(row.domain_flagged)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Investigate on VirusTotal (safe)"
+                        className="text-slate-500 hover:text-neon-green transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
                   </td>
 
                   {/* Threat Level Badge */}

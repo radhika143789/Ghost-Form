@@ -82,21 +82,21 @@ function safeExtractText(root = document.body) {
     clone.querySelectorAll(tag).forEach(el => el.remove());
   });
 
-  // 3. Remove visually hidden elements to exclude honeypots and cloaked content
+  // 3. Remove visually hidden elements to exclude honeypots and cloaked content.
+  //    NOTE: getComputedStyle cannot work on a detached clone, so we check
+  //    inline styles and semantic attributes instead.
   clone.querySelectorAll('*').forEach(el => {
     try {
-      const style = window.getComputedStyle(el);
-      if (
-        style.display === 'none' ||
-        style.visibility === 'hidden' ||
-        style.opacity === '0' ||
+      const style = el.getAttribute('style') || '';
+      const hidden =
+        /display\s*:\s*none/i.test(style) ||
+        /visibility\s*:\s*hidden/i.test(style) ||
+        /opacity\s*:\s*0(?:[^.\d]|$)/i.test(style) ||
         el.getAttribute('aria-hidden') === 'true' ||
-        el.hasAttribute('hidden')
-      ) {
-        el.remove();
-      }
+        el.hasAttribute('hidden');
+      if (hidden) el.remove();
     } catch (_) {
-      // Ignore cross-origin or detached element errors
+      // Ignore detached element errors
     }
   });
 
@@ -119,9 +119,12 @@ function safeExtractText(root = document.body) {
  * regardless of how many times the content script initializes.
  */
 (function triggerMLAnalysis() {
-  // Avoid re-running on the same page (e.g., after SPA route changes without full reload)
-  if (sessionStorage.getItem(`ghost-form-ml-analyzed-${window.location.hostname}`)) return;
-  sessionStorage.setItem(`ghost-form-ml-analyzed-${window.location.hostname}`, '1');
+  // Use hostname as the key (consistent with background.js session cache)
+  const analysisKey = `ghost-form-ml-analyzed-${window.location.hostname}`;
+
+  // Avoid re-running on the same hostname (e.g., after SPA route changes)
+  if (sessionStorage.getItem(analysisKey)) return;
+  sessionStorage.setItem(analysisKey, '1');
 
   // Wait for the DOM to be fully painted before extracting text
   const run = () => {
@@ -206,12 +209,11 @@ function handleFocus(event) {
   }
 }
 
-function handleBlur(event) {
-  const target = event.target;
-  if (target && target.hasAttribute && target.hasAttribute("data-ghost-form-active")) {
-    removeWarning(target);
-  }
-}
+// Fix #7: handleBlur intentionally removed.
+// Warnings must persist until the user explicitly clicks "Ignore for this session".
+// Removing a warning on blur (tab-away) is a UX anti-pattern for a security tool —
+// a user tabbing between a flagged field and another app would never see the warning again.
+
 
 const debouncedInputCheck = debounce((event) => {
   if (isIgnored() || currentStatus === "safe") return;
@@ -247,8 +249,8 @@ function isTargetInput(target) {
 // Attach listeners to a root element (document or shadow root)
 function attachListeners(root) {
   root.addEventListener("focus", handleFocus, true);
-  root.addEventListener("blur", handleBlur, true);
   root.addEventListener("input", debouncedInputCheck, true);
+  // Note: blur listener intentionally omitted — see comment above.
 }
 
 // --- Initialization & Observers ---
