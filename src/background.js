@@ -39,8 +39,27 @@ function getMLWorker() {
       return;
     }
 
-    // Fix #2: Worker computed anchor embeddings for the first time \u2014 persist
-    // them in session storage so they survive the next service worker restart.
+    // Fix #1 (race condition resolved): The worker posts READY after its async
+    // module initialization finishes. We wait for READY before sending
+    // RESTORE_ANCHORS — if we sent it earlier the message would be lost because
+    // self.onmessage inside the module worker is not yet registered.
+    if (type === 'READY') {
+      console.log(`[GhostForm ML] Worker ready (${payload}). Checking for cached anchors...`);
+      chrome.storage.session.get(['__ghost_form_anchors__'], (result) => {
+        if (result.__ghost_form_anchors__ && mlWorker) {
+          mlWorker.postMessage({
+            type: 'RESTORE_ANCHORS',
+            id: crypto.randomUUID(),
+            payload: result.__ghost_form_anchors__,
+          });
+          console.log('[GhostForm] Sent cached anchor embeddings to worker.');
+        }
+      });
+      return;
+    }
+
+    // Worker computed anchor embeddings for the first time — persist them in
+    // session storage so they survive the next service worker restart.
     if (type === 'STORE_ANCHORS') {
       chrome.storage.session.set({ __ghost_form_anchors__: payload });
       console.log('[GhostForm] Anchor embeddings cached in session storage.');
@@ -69,18 +88,9 @@ function getMLWorker() {
     mlWorker = null;
   };
 
-  // Fix #2: After spawning, try to restore previously-computed anchor embeddings
-  // from session storage. If found, inject them into the new worker so the first
-  // ANALYZE call doesn't have to re-compute all anchors from scratch.
-  chrome.storage.session.get(['__ghost_form_anchors__'], (result) => {
-    if (result.__ghost_form_anchors__) {
-      mlWorker.postMessage({
-        type: 'RESTORE_ANCHORS',
-        id: crypto.randomUUID(),
-        payload: result.__ghost_form_anchors__,
-      });
-    }
-  });
+  // Note: RESTORE_ANCHORS is NOT sent here. The worker will post READY
+  // after its async module initialization completes, and the READY handler
+  // in onmessage above will then send RESTORE_ANCHORS safely.
 
   return mlWorker;
 }

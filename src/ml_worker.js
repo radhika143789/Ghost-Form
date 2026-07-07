@@ -121,16 +121,10 @@ async function computeEmbedding(text) {
 
 /**
  * Computes cosine similarity between the page text and all known brand anchors.
- * 
- * @param {string} pageText - Scraped visible text from the web page.
- * @returns {Promise<Array<{brand: string, score: number, label: string}>>}
- */
-/**
- * Computes cosine similarity between the page text and all known brand anchors.
- * Anchor embeddings are computed once and then stored back to background.js
- * via a STORE_ANCHORS message so they can be persisted in session storage and
- * survive MV3 service worker restarts.
- * 
+ * Anchor embeddings are computed once and then posted back to background.js
+ * via STORE_ANCHORS so they can be persisted in session storage and
+ * survive MV3 service worker restarts without re-computation.
+ *
  * @param {string} pageText - Scraped visible text from the web page.
  * @returns {Promise<Array<{brand: string, score: number, label: string}>>}
  */
@@ -225,7 +219,17 @@ self.onmessage = async (event) => {
   }
 };
 
-// Pre-warm the pipeline on worker startup so the first real request is fast
-getEmbeddingPipeline().catch((err) => {
-  console.warn('[GhostForm ML Worker] Pre-warm failed, will retry on first request:', err);
-});
+// Pre-warm the pipeline on worker startup so the first real request is fast.
+// After pre-warm (success OR failure), post READY so background.js knows
+// self.onmessage is registered and it is safe to send RESTORE_ANCHORS.
+// This solves the race condition where RESTORE_ANCHORS arrived before the
+// module's async import graph had finished initializing.
+getEmbeddingPipeline()
+  .then(() => {
+    postMessage({ type: 'READY', payload: 'pipeline_warm' });
+  })
+  .catch((err) => {
+    console.warn('[GhostForm ML Worker] Pre-warm failed, will retry on first request:', err);
+    // Still post READY so background.js isn't blocked waiting forever
+    postMessage({ type: 'READY', payload: 'pipeline_cold' });
+  });
