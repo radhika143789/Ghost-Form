@@ -22,7 +22,7 @@
     {
       "matches": ["https://*/*", "http://*/*"],
       "css": ["content.css"],
-      "js": ["content.js"],
+      "js": ["dist/content_features.js", "content.js"],
       "run_at": "document_end",
       "all_frames": true
     }
@@ -40,6 +40,7 @@
       "resources": [
         "offscreen.html",
         "dist/offscreen.js",
+        "dist/content_features.js",
         "dist/ml_worker.js",
         "dist/*.wasm",
         "dist/*.ort",

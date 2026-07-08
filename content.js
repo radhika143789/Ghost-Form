@@ -1,3 +1,14 @@
+/**
+ * content.js — Ghost Form Phase 5
+ *
+ * Phase 5 features integrated:
+ *  - GhostPrint: Keystroke biometric anomaly detection on password fields.
+ *  - Active Shield: Clickjack interceptor via elementFromPoint sampling.
+ *  - X-Ray Vision: Structural DOM fingerprinting fused with ML results.
+ *  - Ghost Masks: Ephemeral email alias injection on risky forms.
+ *  - Fine-Print AI: Dark pattern detection in consent/legal text.
+ */
+
 let currentStatus = "safe";
 const ignoredSessionKey = `ghost-form-ignore-${window.location.hostname}`;
 
@@ -167,18 +178,49 @@ function safeExtractText(root = document.body) {
   // Wait for the DOM to be fully painted before extracting text
   const run = () => {
     const sanitizedText = safeExtractText(document.body);
-    if (!sanitizedText || sanitizedText.length < 20) return; // Not enough text to be meaningful
+    if (!sanitizedText || sanitizedText.length < 20) return;
+
+    // ── Phase 5: X-Ray Vision ─────────────────────────────────────────────
+    // Run structural DOM fingerprinting in parallel with text-based ML.
+    // Both signals are fused before rendering the final status.
+    const structuralSignal = ghostFormXRay.analyzePageStructure();
+    if (structuralSignal.structuralRisk === 'unsafe') {
+      console.info(
+        `[GhostForm X-Ray] Structural risk: ${structuralSignal.score} (${structuralSignal.matchedTemplate})`
+      );
+    }
 
     chrome.runtime.sendMessage(
       {
-        action: 'ANALYZE_PAGE',
-        text: sanitizedText,
-        hostname: window.location.hostname,
+        action:           'ANALYZE_PAGE',
+        text:             sanitizedText,
+        hostname:         window.location.hostname,
+        structuralRisk:   structuralSignal.structuralRisk,
+        structuralScore:  structuralSignal.score,
       },
       (response) => {
-        if (chrome.runtime.lastError) return; // Service worker may not be ready yet
+        if (chrome.runtime.lastError) return;
         if (response && response.status) {
-          currentStatus = response.status;
+          // Fuse ML status with structural risk:
+          // If either signal is 'unsafe', escalate to 'unsafe'.
+          // If either is 'unknown', don't downgrade to 'safe'.
+          const mlStatus  = response.status;
+          const xrayRisk  = structuralSignal.structuralRisk;
+
+          if (mlStatus === 'unsafe' || xrayRisk === 'unsafe') {
+            currentStatus = 'unsafe';
+          } else if (mlStatus === 'unknown' || xrayRisk === 'unknown') {
+            currentStatus = 'unknown';
+          } else {
+            currentStatus = 'safe';
+          }
+
+          // ── Phase 5: Fine-Print AI ───────────────────────────────────
+          // After we know the page risk level, scan for dark patterns
+          // in consent text. Only fires on risky/unknown pages.
+          if (currentStatus !== 'safe') {
+            ghostFormFinePrint.runFinePrintAnalysis(currentStatus);
+          }
         }
       }
     );
@@ -257,12 +299,20 @@ function removeWarning(inputElement) {
 // --- Event Handlers ---
 function handleFocus(event) {
   if (isIgnored() || currentStatus === "safe") return;
-  
+
   const target = event.target;
   if (isTargetInput(target)) {
     // Red state: Warn instantly on focus
     if (currentStatus === "unsafe") {
       showWarning(target);
+    }
+
+    // ── Phase 5: Active Shield — re-check for clickjack on focus ──────────
+    ghostFormActiveShield.handleActiveShieldFocus(event);
+
+    // ── Phase 5: Ghost Masks — offer alias for email fields on risky sites ─
+    if (currentStatus === 'unknown' || currentStatus === 'unsafe') {
+      ghostFormMasks.offerGhostMask(target, currentStatus);
     }
   }
 }
@@ -453,10 +503,36 @@ observer.observe(document.documentElement, {
 
 // Scan existing DOM for shadow roots on initial load
 // Uses requestIdleCallback to avoid blocking the main thread during page load.
-const initialScan = () => scanForShadowRoots(document.documentElement);
+const initialScan = () => {
+  scanForShadowRoots(document.documentElement);
+
+  // ── Phase 5: Active Shield — initial clickjack scan ───────────────────
+  ghostFormActiveShield.runActiveShieldScan(document);
+};
 
 if (typeof requestIdleCallback === 'function') {
   requestIdleCallback(initialScan, { timeout: 2000 });
 } else {
   setTimeout(initialScan, 100);
+}
+
+// ===========================================================================
+// PHASE 5 FEATURE INTEGRATION
+// ===========================================================================
+// All Phase 5 modules are namespaced under ghostForm* globals, populated by
+// the Vite bundle. When content.js is bundled, these imports are resolved.
+// In the plain-JS content script context, feature modules are bundled into
+// a separate content_features.js file loaded via manifest.json content_scripts.
+
+// ── Phase 5: GhostPrint — Keystroke Biometrics ───────────────────────────
+if (typeof ghostFormGhostPrint !== 'undefined') {
+  ghostFormGhostPrint.attachGhostPrintListeners(document);
+  ghostFormGhostPrint.onGhostPrintAnomaly(({ element, score, message }) => {
+    console.warn(`[GhostForm GhostPrint] Anomaly on ${element.name || 'password field'}: ${message}`);
+    // Escalate to unknown if we were safe — RAT injection risk
+    if (currentStatus === 'safe') {
+      currentStatus = 'unknown';
+    }
+    showWarning(element);
+  });
 }

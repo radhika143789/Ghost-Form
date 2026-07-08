@@ -21,6 +21,8 @@ export default defineConfig({
         offscreen: resolve(__dirname, 'src/offscreen.js'),
         // The dedicated ML Web Worker bundle
         ml_worker: resolve(__dirname, 'src/ml_worker.js'),
+        // Phase 5: Content script feature modules bundle
+        content_features: resolve(__dirname, 'src/content_features.js'),
       },
       output: {
         // Output as ES modules so MV3 service worker can use import()

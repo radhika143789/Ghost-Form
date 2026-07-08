@@ -425,6 +425,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // async response
   }
 
+  // --- Phase 5: Fine-Print AI — dark pattern consent analysis ---
+  if (request.action === 'ANALYZE_CONSENT') {
+    const { text: consentText } = request;
+
+    // Import the dark pattern anchors from fine_print_ai (bundled inline to avoid
+    // dynamic imports in the service worker context)
+    const DARK_PATTERN_PHRASES = [
+      'By clicking submit you agree to a recurring monthly subscription charge which will renew automatically until you cancel.',
+      'We may share or sell your personal information including name email and browsing data with our affiliated partners and third party advertisers.',
+      'By using this service you agree to binding arbitration and waive any right to trial by jury or to participate in a class action lawsuit.',
+      'Your free trial will automatically convert to a paid subscription and your payment method will be charged unless you cancel before the trial period ends.',
+      'We collect your precise geolocation data continuously including when the application is running in the background.',
+      'I agree to receive promotional emails marketing communications and special offers from our partners.',
+    ];
+
+    const DARK_PATTERN_LABELS = [
+      { id: 'recurring_subscription', label: '⚠️ Recurring Subscription', description: 'May automatically charge you on a recurring basis.', severity: 'high' },
+      { id: 'data_sale',              label: '⚠️ Data Sold to Third Parties', description: 'Your personal data may be sold to third parties.', severity: 'high' },
+      { id: 'arbitration_clause',     label: '📋 Forced Arbitration', description: 'Waives your right to a jury trial or class action.', severity: 'medium' },
+      { id: 'free_trial_trap',        label: '⚠️ Free Trial Auto-Converts', description: 'Free trial automatically converts to paid without notice.', severity: 'high' },
+      { id: 'location_tracking',      label: '📍 Continuous Location Tracking', description: 'Tracks your location even when the app is not in use.', severity: 'medium' },
+      { id: 'marketing_consent',      label: '📧 Pre-checked Marketing Consent', description: 'Consent to marketing emails is pre-selected by default.', severity: 'low' },
+    ];
+
+    sendToOffscreenML('ML_CONSENT_ANALYZE', {
+      consentText,
+      anchors: DARK_PATTERN_PHRASES,
+    }, 30000)
+      .then((response) => {
+        if (response?.success) {
+          // Map raw similarity scores back to labeled findings
+          const findings = (response.findings || [])
+            .map((match, i) => ({ ...DARK_PATTERN_LABELS[i], score: match.score }))
+            .filter(f => f.score >= 0.6); // Only report above 60% similarity threshold
+          sendResponse({ findings });
+        } else {
+          sendResponse({ findings: [] });
+        }
+      })
+      .catch(() => sendResponse({ findings: [] }));
+    return true;
+  }
+
   // --- Ping the ML worker to pre-warm it ---
   if (request.action === 'PING_ML') {
     sendToOffscreenML('ML_PING', {}, 60000)

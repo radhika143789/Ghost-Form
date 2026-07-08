@@ -148,6 +148,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // async
   }
 
+  // Phase 5: Fine-Print AI — semantic dark pattern detection
+  // Embeds the extracted consent text and compares against dark pattern anchors.
+  if (request.action === 'ML_CONSENT_ANALYZE') {
+    const { consentText, anchors } = request;
+    sendToMLWorker('CONSENT_ANALYZE', { consentText, anchors }, 30000)
+      .then((findings) => sendResponse({ success: true, findings }))
+      .catch((err) => sendResponse({ success: false, error: err.message, findings: [] }));
+    return true; // async
+  }
+
   console.warn('[GhostForm Offscreen] Unknown action:', request.action);
   sendResponse({ error: `Unknown offscreen action: ${request.action}` });
   return false;
