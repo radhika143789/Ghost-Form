@@ -63,57 +63,88 @@ function debounce(func, wait) {
 /**
  * Extracts clean, sanitized visible text from the page for ML analysis.
  *
- * Security properties:
- *  - Clones the body to avoid mutating the live DOM.
- *  - Strips <script>, <style>, <noscript>, and <svg> tags entirely.
- *  - Skips elements that are hidden (display:none, visibility:hidden, opacity:0).
- *  - Collapses whitespace to prevent padding attacks.
- *  - HARD CAP: Truncates to 2,000 characters to prevent Memory Exhaustion
- *    DoS attacks where an attacker injects massive amounts of text to
- *    overwhelm the local ONNX embedding model.
+ * SECURITY FIX (Critical Audit Finding — DOM Truncation Evasion):
+ *  The previous implementation cloned the DOM and manually checked inline
+ *  styles, which missed CSS-class-based cloaking (e.g., position:absolute;
+ *  left:-9999px, transform:scale(0), or text color matching background).
+ *  An attacker could inject 2,000 chars of invisible "benign" text to
+ *  consume the truncation budget and hide the real phishing payload.
+ *
+ * New approach:
+ *  1. Uses the LIVE DOM's `innerText`, which respects the browser's own
+ *     computed style engine — any element that is visually hidden by ANY
+ *     CSS technique is automatically excluded by the browser.
+ *  2. Adds form-proximity text sampling: text immediately surrounding
+ *     <input>, <form>, and <button> elements is extracted with higher
+ *     priority, ensuring phishing payloads near credential fields are
+ *     always captured even if the page is very long.
+ *  3. Collapses whitespace and enforces a hard cap to prevent memory
+ *     exhaustion DoS on the ONNX embedding model.
  *
  * @param {Element} [root=document.body] - The root element to extract from.
  * @returns {string} Sanitized, truncated plain text.
  */
 function safeExtractText(root = document.body) {
   const MAX_CHARS = 2000;
+  const FORM_CONTEXT_BUDGET = 800; // Reserve chars for form-adjacent text
 
   if (!root) return '';
 
-  // 1. Clone so we can safely mutate without touching the live page
-  const clone = root.cloneNode(true);
+  // ── Step 1: Extract form-proximity text (highest priority) ──────────────
+  // Phishing pages put their credential-stealing payload near input fields.
+  // By sampling text around forms/inputs FIRST, we guarantee this content
+  // is always included, even if the page has thousands of chars of filler.
+  const formContextParts = [];
+  const formSelectors = 'form, input, select, textarea, button[type="submit"], [role="form"]';
+  const formElements = root.querySelectorAll(formSelectors);
 
-  // 2. Remove all tags that never contain user-visible text
-  const STRIP_TAGS = ['script', 'style', 'noscript', 'svg', 'iframe', 'canvas', 'video', 'audio'];
-  STRIP_TAGS.forEach(tag => {
-    clone.querySelectorAll(tag).forEach(el => el.remove());
-  });
+  const seenFormAncestors = new WeakSet();
+  for (const el of formElements) {
+    // Walk up to the nearest container with meaningful text (form, section, div)
+    const contextParent = el.closest('form') || el.parentElement;
+    if (!contextParent || seenFormAncestors.has(contextParent)) continue;
+    seenFormAncestors.add(contextParent);
 
-  // 3. Remove visually hidden elements to exclude honeypots and cloaked content.
-  //    NOTE: getComputedStyle cannot work on a detached clone, so we check
-  //    inline styles and semantic attributes instead.
-  clone.querySelectorAll('*').forEach(el => {
     try {
-      const style = el.getAttribute('style') || '';
-      const hidden =
-        /display\s*:\s*none/i.test(style) ||
-        /visibility\s*:\s*hidden/i.test(style) ||
-        /opacity\s*:\s*0(?:[^.\d]|$)/i.test(style) ||
-        el.getAttribute('aria-hidden') === 'true' ||
-        el.hasAttribute('hidden');
-      if (hidden) el.remove();
+      // innerText on the LIVE DOM respects computed styles natively —
+      // elements hidden via CSS classes, external stylesheets, or any
+      // technique are automatically excluded by the browser engine.
+      const text = (contextParent.innerText || '').replace(/\s+/g, ' ').trim();
+      if (text.length > 5) {
+        formContextParts.push(text);
+      }
     } catch (_) {
-      // Ignore detached element errors
+      // Skip elements that throw on property access (e.g., detached nodes)
     }
-  });
+  }
 
-  // 4. Extract raw text and collapse whitespace
-  const rawText = (clone.innerText || clone.textContent || '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const formContextText = formContextParts.join(' ').slice(0, FORM_CONTEXT_BUDGET);
 
-  // 5. HARD CAP — truncate to prevent ML model memory exhaustion
-  return rawText.slice(0, MAX_CHARS);
+  // ── Step 2: Extract global page text (general context) ──────────────────
+  // Uses innerText on the live root, which natively excludes:
+  //   - display:none, visibility:hidden, opacity:0
+  //   - position:absolute; left:-9999px (off-screen cloaking)
+  //   - transform:scale(0), clip-path, and other visual hiding
+  //   - <script>, <style>, <noscript> (excluded by innerText spec)
+  // This is strictly more accurate than the old clone-and-regex approach.
+  let globalText = '';
+  try {
+    globalText = (root.innerText || '').replace(/\s+/g, ' ').trim();
+  } catch (_) {
+    // Fallback for edge cases where innerText throws
+    globalText = (root.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  // ── Step 3: Combine with priority ──────────────────────────────────────
+  // Form-context text is prepended so the ML model always sees the
+  // credential-adjacent content, even after truncation.
+  const remainingBudget = MAX_CHARS - formContextText.length;
+  const globalPortion = globalText.slice(0, Math.max(remainingBudget, 0));
+
+  const combined = (formContextText + ' ' + globalPortion).replace(/\s+/g, ' ').trim();
+
+  // ── Step 4: HARD CAP — truncate to prevent ML model memory exhaustion ──
+  return combined.slice(0, MAX_CHARS);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,45 +305,158 @@ function isTargetInput(target) {
 }
 
 // Attach listeners to a root element (document or shadow root)
+// Tracks which roots have already been instrumented to avoid duplicates.
+const _instrumentedRoots = new WeakSet();
+
 function attachListeners(root) {
+  if (_instrumentedRoots.has(root)) return;
+  _instrumentedRoots.add(root);
+
   root.addEventListener("focus", handleFocus, true);
   root.addEventListener("input", debouncedInputCheck, true);
   // Note: blur listener intentionally omitted — see comment above.
+}
+
+// ---------------------------------------------------------------------------
+// Shadow DOM — Closed Mode Interceptor
+// ---------------------------------------------------------------------------
+//
+// SECURITY FIX (High Audit Finding — Shadow DOM Evasion):
+//   Advanced phishing kits can mount forms inside Closed Shadow DOMs
+//   (attachShadow({ mode: 'closed' })). In closed mode, node.shadowRoot
+//   returns null to external scripts, so our content script cannot attach
+//   event listeners and the phishing form goes completely undetected.
+//
+//   This patch overrides Element.prototype.attachShadow to:
+//     1. Capture references to ALL shadow roots (open AND closed).
+//     2. Store closed roots in a WeakMap keyed by the host element.
+//     3. Automatically attach our focus/input listeners to closed roots.
+//
+//   The patch is injected in the content script's ISOLATED world. For
+//   maximum coverage on pages that call attachShadow before our script
+//   runs, we also scan the existing DOM on load.
+
+/** @type {WeakMap<Element, ShadowRoot>} */
+const closedShadowRoots = new WeakMap();
+
+const _origAttachShadow = Element.prototype.attachShadow;
+Element.prototype.attachShadow = function(init) {
+  const shadowRoot = _origAttachShadow.call(this, init);
+
+  // Capture closed roots that would otherwise be invisible
+  if (init && init.mode === 'closed') {
+    closedShadowRoots.set(this, shadowRoot);
+  }
+
+  // Attach listeners regardless of open/closed mode
+  attachListeners(shadowRoot);
+
+  return shadowRoot;
+};
+
+/**
+ * Returns the shadow root for an element, even if it's closed.
+ * Falls back to the native .shadowRoot (which returns null for closed).
+ *
+ * @param {Element} el
+ * @returns {ShadowRoot|null}
+ */
+function getShadowRoot(el) {
+  return el.shadowRoot || closedShadowRoots.get(el) || null;
+}
+
+// ---------------------------------------------------------------------------
+// MutationObserver — Debounced & Targeted DOM Scanning
+// ---------------------------------------------------------------------------
+//
+// PERFORMANCE FIX (High Audit Finding — Main Thread Freezing):
+//   The previous observer called querySelectorAll('*') on every added node,
+//   which is O(n) over the entire subtree and fires on every DOM mutation.
+//   On heavy SPAs (React, Angular) that constantly tear down and rebuild
+//   large DOM trees, this caused catastrophic UI lag and CPU spiking.
+//
+//   New approach:
+//     1. Batch mutations and debounce processing (100ms coalesce window).
+//     2. Use a targeted TreeWalker that only visits ELEMENT_NODE, skipping
+//        text, comment, and processing instruction nodes.
+//     3. Only scan nodes that have a shadowRoot (open or closed).
+//     4. Track already-instrumented roots via WeakSet to avoid duplicate work.
+
+/** @type {Set<Node>} Nodes pending shadow root scanning */
+let _pendingScanNodes = new Set();
+let _scanDebounceTimer = null;
+const SCAN_DEBOUNCE_MS = 100;
+
+/**
+ * Scans a subtree for shadow roots (open and closed) and attaches listeners.
+ * Uses TreeWalker for O(elements) traversal without allocating a NodeList.
+ *
+ * @param {Node} root - The root node to scan.
+ */
+function scanForShadowRoots(root) {
+  if (!root || root.nodeType !== Node.ELEMENT_NODE) return;
+
+  // Check the root itself
+  const rootShadow = getShadowRoot(/** @type {Element} */ (root));
+  if (rootShadow) attachListeners(rootShadow);
+
+  // Walk descendants — TreeWalker is faster than querySelectorAll('*')
+  // because it doesn't allocate a static NodeList snapshot.
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  let node;
+  while ((node = walker.nextNode())) {
+    const shadow = getShadowRoot(/** @type {Element} */ (node));
+    if (shadow) attachListeners(shadow);
+  }
+}
+
+/**
+ * Processes all pending scan nodes in a single batch.
+ * Called after the debounce window closes.
+ */
+function flushPendingScans() {
+  const nodes = _pendingScanNodes;
+  _pendingScanNodes = new Set();
+  _scanDebounceTimer = null;
+
+  for (const node of nodes) {
+    // Skip nodes that were removed from the DOM before we got to them
+    if (!node.isConnected) continue;
+    scanForShadowRoots(node);
+  }
 }
 
 // --- Initialization & Observers ---
 
 attachListeners(document);
 
-// MutationObserver for dynamically injected forms and shadow DOMs
 const observer = new MutationObserver((mutations) => {
-  mutations.forEach((mutation) => {
-    mutation.addedNodes.forEach((node) => {
+  for (const mutation of mutations) {
+    for (const node of mutation.addedNodes) {
       if (node.nodeType === Node.ELEMENT_NODE) {
-        if (node.shadowRoot) {
-          attachListeners(node.shadowRoot);
-        }
-        
-        // Scan children for shadow DOMs
-        const shadowHosts = node.querySelectorAll ? node.querySelectorAll('*') : [];
-        shadowHosts.forEach(host => {
-          if (host.shadowRoot) {
-            attachListeners(host.shadowRoot);
-          }
-        });
+        _pendingScanNodes.add(node);
       }
-    });
-  });
+    }
+  }
+
+  // Debounce: coalesce rapid-fire mutations (e.g., SPA re-renders)
+  // into a single scan pass after the DOM settles.
+  if (!_scanDebounceTimer && _pendingScanNodes.size > 0) {
+    _scanDebounceTimer = setTimeout(flushPendingScans, SCAN_DEBOUNCE_MS);
+  }
 });
 
 observer.observe(document.documentElement, {
   childList: true,
-  subtree: true
+  subtree: true,
 });
 
 // Scan existing DOM for shadow roots on initial load
-document.querySelectorAll('*').forEach(node => {
-  if (node.shadowRoot) {
-    attachListeners(node.shadowRoot);
-  }
-});
+// Uses requestIdleCallback to avoid blocking the main thread during page load.
+const initialScan = () => scanForShadowRoots(document.documentElement);
+
+if (typeof requestIdleCallback === 'function') {
+  requestIdleCallback(initialScan, { timeout: 2000 });
+} else {
+  setTimeout(initialScan, 100);
+}

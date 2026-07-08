@@ -17,6 +17,8 @@ export default defineConfig({
       input: {
         // The background service worker bundle
         background: resolve(__dirname, 'src/background.js'),
+        // The Offscreen Document script (hosts the ML worker)
+        offscreen: resolve(__dirname, 'src/offscreen.js'),
         // The dedicated ML Web Worker bundle
         ml_worker: resolve(__dirname, 'src/ml_worker.js'),
       },

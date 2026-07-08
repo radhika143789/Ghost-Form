@@ -38,6 +38,8 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "offscreen.html",
+        "dist/offscreen.js",
         "dist/ml_worker.js",
         "dist/*.wasm",
         "dist/*.ort",

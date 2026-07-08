@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!--
+  offscreen.html — Ghost Form Offscreen Document
+
+  This is an invisible background page created via chrome.offscreen.createDocument().
+  It exists solely to host the ML Web Worker (ml_worker.js) in a stable execution
+  environment that won't be killed by MV3 service worker lifecycle limits.
+
+  SECURITY FIX (Critical Audit Finding — MV3 Service Worker Lifecycle):
+    Previously, the ML Web Worker was spawned directly inside the background
+    service worker. Chrome aggressively terminates service workers (~30s idle
+    or ~5min total), which would kill the worker mid-inference, crash the
+    WASM runtime, and force expensive re-initialization on every cold start.
+    Offscreen documents have a much more stable lifecycle.
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Ghost Form ML</title></head>
+<body>
+  <script src="dist/offscreen.js" type="module"></script>
+</body>
+</html>

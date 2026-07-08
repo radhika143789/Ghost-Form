@@ -1,126 +1,102 @@
 /**
- * background.js — Ghost Form Phase 3
+ * background.js — Ghost Form Phase 5 (Audit Fix)
  *
- * This is the main service worker. Its key Phase 3 responsibilities are:
- *  1. Spawning and managing the ML Web Worker (ml_worker.js).
- *  2. Routing ANALYZE requests from content.js to the ML Worker.
+ * This is the main service worker. Its responsibilities are:
+ *  1. Creating and managing the Offscreen Document that hosts the ML Worker.
+ *  2. Routing ANALYZE requests from content.js to the Offscreen Document.
  *  3. Maintaining a session-level result cache to avoid redundant ML inference.
- *  4. Recovering worker state gracefully after MV3 service worker suspension.
+ *  4. Recovering gracefully after MV3 service worker suspension.
  *
- * Note: The Phase 2 API proxy fallback (THREAT_API_ENDPOINT) has been removed
- * in Phase 3. Detection is now fully on-device via the ML worker.
+ * SECURITY FIX (Critical Audit Finding — MV3 Service Worker Lifecycle):
+ *   The ML Web Worker is now hosted inside an Offscreen Document instead of
+ *   directly inside this service worker. This prevents Chrome from killing
+ *   the WASM runtime mid-inference when it suspends the service worker.
  */
 
 // ---------------------------------------------------------------------------
-// 1. ML Worker Management
+// 1. Offscreen Document Management
 // ---------------------------------------------------------------------------
 
-let mlWorker = null;
-const pendingRequests = new Map(); // id → { resolve, reject }
-// requestCounter replaced by crypto.randomUUID() — see sendToMLWorker
+const OFFSCREEN_DOCUMENT_PATH = 'offscreen.html';
+
+/** @type {boolean} Tracks whether we are in the process of creating the offscreen doc */
+let creatingOffscreenDocument = false;
 
 /**
- * Lazily spawns the ML Worker. If the service worker was suspended by MV3
- * and restarted, this re-creates the worker on first use.
+ * Ensures the offscreen document exists. If Chrome suspended and restarted
+ * the service worker, the offscreen document may still be alive from the
+ * previous session — we check first to avoid duplicates.
  */
-function getMLWorker() {
-  if (mlWorker) return mlWorker;
+async function setupOffscreenDocument() {
+  // Check if one already exists (survives service worker restarts)
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL(OFFSCREEN_DOCUMENT_PATH)],
+  });
 
-  mlWorker = new Worker(
-    chrome.runtime.getURL('dist/ml_worker.js'),
-    { type: 'module' }
-  );
+  if (existingContexts.length > 0) {
+    return; // Already running
+  }
 
-  // Route messages from the worker back to the correct pending Promise
-  mlWorker.onmessage = (event) => {
-    const { type, id, payload } = event.data;
-
-    if (type === 'STATUS' || type === 'MODEL_PROGRESS') {
-      console.log(`[GhostForm ML] ${type}:`, payload);
-      return;
-    }
-
-    // Fix #1 (race condition resolved): The worker posts READY after its async
-    // module initialization finishes. We wait for READY before sending
-    // RESTORE_ANCHORS — if we sent it earlier the message would be lost because
-    // self.onmessage inside the module worker is not yet registered.
-    if (type === 'READY') {
-      console.log(`[GhostForm ML] Worker ready (${payload}). Checking for cached anchors...`);
-      chrome.storage.session.get(['__ghost_form_anchors__'], (result) => {
-        if (result.__ghost_form_anchors__ && mlWorker) {
-          mlWorker.postMessage({
-            type: 'RESTORE_ANCHORS',
-            id: crypto.randomUUID(),
-            payload: result.__ghost_form_anchors__,
-          });
-          console.log('[GhostForm] Sent cached anchor embeddings to worker.');
+  // Prevent duplicate creation if two messages arrive simultaneously
+  if (creatingOffscreenDocument) {
+    await new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (!creatingOffscreenDocument) {
+          clearInterval(check);
+          resolve();
         }
-      });
-      return;
+      }, 100);
+    });
+    return;
+  }
+
+  creatingOffscreenDocument = true;
+  try {
+    await chrome.offscreen.createDocument({
+      url: OFFSCREEN_DOCUMENT_PATH,
+      reasons: ['WORKERS'],
+      justification: 'Host ML Web Worker for on-device phishing detection (WASM/ONNX inference)',
+    });
+    console.log('[GhostForm] Offscreen document created successfully.');
+  } catch (err) {
+    // If it already exists (race condition), that's fine
+    if (!err.message?.includes('Only a single offscreen')) {
+      console.error('[GhostForm] Failed to create offscreen document:', err);
     }
-
-    // Worker computed anchor embeddings for the first time — persist them in
-    // session storage so they survive the next service worker restart.
-    if (type === 'STORE_ANCHORS') {
-      chrome.storage.session.set({ __ghost_form_anchors__: payload });
-      console.log('[GhostForm] Anchor embeddings cached in session storage.');
-      return;
-    }
-
-    const pending = pendingRequests.get(id);
-    if (!pending) return;
-
-    pendingRequests.delete(id);
-
-    if (type === 'ERROR') {
-      pending.reject(new Error(payload));
-    } else {
-      pending.resolve(payload);
-    }
-  };
-
-  mlWorker.onerror = (err) => {
-    console.error('[GhostForm ML Worker Error]', err);
-    // Reject all pending requests and tear down so it respawns next call
-    for (const [id, pending] of pendingRequests) {
-      pending.reject(new Error('ML Worker crashed'));
-    }
-    pendingRequests.clear();
-    mlWorker = null;
-  };
-
-  // Note: RESTORE_ANCHORS is NOT sent here. The worker will post READY
-  // after its async module initialization completes, and the READY handler
-  // in onmessage above will then send RESTORE_ANCHORS safely.
-
-  return mlWorker;
+  } finally {
+    creatingOffscreenDocument = false;
+  }
 }
 
 /**
- * Sends a typed message to the ML Worker and returns a Promise.
- * 
- * @param {string} type - Message type ('ANALYZE' | 'EMBED' | 'PING')
- * @param {object} payload - The data to send.
+ * Sends an ML inference request to the offscreen document.
+ * The offscreen document hosts the Web Worker and routes the message through.
+ *
+ * @param {string} action - 'ML_ANALYZE' | 'ML_PING'
+ * @param {object} payload - Data fields specific to the action.
  * @param {number} timeoutMs - Max wait time in milliseconds.
+ * @returns {Promise<object>} The response from the offscreen ML worker.
  */
-function sendToMLWorker(type, payload, timeoutMs = 30000) {
-  return new Promise((resolve, reject) => {
-    // Fix #16: crypto.randomUUID() is collision-proof and survives service worker restarts
-    const id = crypto.randomUUID();
-    const worker = getMLWorker();
+async function sendToOffscreenML(action, payload = {}, timeoutMs = 30000) {
+  await setupOffscreenDocument();
 
-    // Timeout guard — ML inference can be slow on first run
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      pendingRequests.delete(id);
-      reject(new Error(`ML Worker timeout for request ${id}`));
+      reject(new Error(`Offscreen ML timeout for action ${action}`));
     }, timeoutMs);
 
-    pendingRequests.set(id, {
-      resolve: (val) => { clearTimeout(timer); resolve(val); },
-      reject:  (err) => { clearTimeout(timer); reject(err); },
-    });
-
-    worker.postMessage({ type, id, payload });
+    chrome.runtime.sendMessage(
+      { target: 'offscreen', action, ...payload, timeoutMs },
+      (response) => {
+        clearTimeout(timer);
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(response);
+      }
+    );
   });
 }
 
@@ -156,7 +132,7 @@ function interpretMLResults(results) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Domain Whitelist & Session Cache
+// 3. Domain Whitelist & Session Cache (LRU)
 // ---------------------------------------------------------------------------
 
 // High #9: In-memory whitelist cache — avoids O(n) cold chrome.storage.local I/O
@@ -181,15 +157,86 @@ async function isDomainWhitelisted(hostname) {
   return _whitelistCache.has(hostname); // O(1)
 }
 
+// ── LRU Session Cache ─────────────────────────────────────────────────────
+//
+// PERFORMANCE FIX (Medium Audit Finding — Storage Quota Exhaustion):
+//   chrome.storage.session has a strict ~10MB quota. The previous code wrote
+//   every unique hostname's ML result to session storage without eviction.
+//   A user visiting many unique domains (e.g., Google search results) would
+//   eventually hit QUOTA_BYTES_PER_ITEM or total quota, crashing cache writes.
+//
+//   This LRU cache keeps at most MAX_CACHED_DOMAINS entries in memory, using
+//   a Map (which preserves insertion order) for O(1) get/set/delete and O(1)
+//   LRU eviction from the front. Session storage is synchronized lazily.
+
+const MAX_CACHED_DOMAINS = 150;
+
+/** @type {Map<string, any>} LRU: oldest entries at the front, newest at the back */
+const _sessionLRU = new Map();
+
+/** @type {boolean} Whether the LRU has been primed from storage */
+let _lruPrimed = false;
+
+/**
+ * Primes the in-memory LRU from chrome.storage.session on first use.
+ * Only called once per service worker lifecycle.
+ */
+async function _primeLRU() {
+  if (_lruPrimed) return;
+  _lruPrimed = true;
+
+  try {
+    const all = await chrome.storage.session.get(null);
+    for (const [key, value] of Object.entries(all)) {
+      if (key.startsWith('ml_status_')) {
+        _sessionLRU.set(key, value);
+      }
+    }
+    // If we loaded more than MAX, trim from the front (oldest)
+    while (_sessionLRU.size > MAX_CACHED_DOMAINS) {
+      const oldestKey = _sessionLRU.keys().next().value;
+      _sessionLRU.delete(oldestKey);
+      chrome.storage.session.remove(oldestKey).catch(() => {});
+    }
+    console.log(`[GhostForm] LRU cache primed with ${_sessionLRU.size} entries.`);
+  } catch (_) {
+    // Non-fatal: cache will be empty but functional
+  }
+}
+
 async function getSessionCache(key) {
-  const result = await chrome.storage.session.get([key]);
-  // High #5: Use ?? not || — || coerces falsy values (0, false, '') to null,
-  // causing a cache miss even when a valid falsy result was intentionally stored.
-  return result[key] ?? null;
+  await _primeLRU();
+
+  if (!_sessionLRU.has(key)) return null;
+
+  // Move to end (most recently used)
+  const value = _sessionLRU.get(key);
+  _sessionLRU.delete(key);
+  _sessionLRU.set(key, value);
+
+  return value;
 }
 
 async function setSessionCache(key, value) {
-  await chrome.storage.session.set({ [key]: value });
+  await _primeLRU();
+
+  // If key already exists, delete it first so it moves to the end
+  _sessionLRU.delete(key);
+
+  // Evict oldest entry if at capacity
+  if (_sessionLRU.size >= MAX_CACHED_DOMAINS) {
+    const oldestKey = _sessionLRU.keys().next().value;
+    _sessionLRU.delete(oldestKey);
+    // Fire-and-forget storage cleanup
+    chrome.storage.session.remove(oldestKey).catch(() => {});
+  }
+
+  _sessionLRU.set(key, value);
+
+  // Persist to session storage (fire-and-forget, non-blocking)
+  chrome.storage.session.set({ [key]: value }).catch((err) => {
+    console.warn('[GhostForm] Session cache write failed (quota?):', err.message);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -234,38 +281,47 @@ async function checkDomainStatus(urlString) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Circuit Breaker — Per-Tab Rate Limiter (Token Bucket)
+// 5. Circuit Breaker — Per-Tab Rate Limiter + Global Concurrency Lock
 // ---------------------------------------------------------------------------
 
 /**
- * Implements a token-bucket rate limiter per Chrome tab ID.
+ * SECURITY FIX (Medium Audit Finding — Global Rate Limit Evasion):
+ *   The previous implementation only rate-limited per tabId. A malicious site
+ *   could open multiple popups or iframes (each with a unique tabId) to bypass
+ *   the per-tab limit and flood the ML pipeline, causing OOM in the WASM runtime.
  *
- * Security properties:
- *  - Enforces a hard maximum of MAX_REQUESTS_PER_WINDOW inference calls
- *    per tab within any WINDOW_MS rolling window.
- *  - A malicious or compromised content script flooding us with 50 ANALYZE_PAGE
- *    messages per second will only ever trigger 1 ML inference; the rest
- *    receive an immediate 'rate_limited' response.
- *  - Tab state is pruned on a 60-second interval to prevent memory leaks
- *    from abandoned tabs.
+ *   New approach adds TWO layers:
+ *     1. Per-tab token bucket (unchanged) — max 1 request/second/tab.
+ *     2. Global concurrency lock — max 2 concurrent ML inferences total
+ *        across the entire extension. Excess requests are rejected immediately.
  *
  * @typedef {{ timestamps: number[] }} TabBucket
  */
 
 const RATE_LIMIT_WINDOW_MS    = 1000; // 1 second rolling window
 const MAX_REQUESTS_PER_WINDOW = 1;    // Max 1 ML inference per second per tab
+const MAX_CONCURRENT_INFERENCES = 2;  // Max 2 concurrent ML inferences globally
 
 /** @type {Map<number, TabBucket>} */
 const rateLimitBuckets = new Map();
 
+/** @type {number} Currently active ML inference count */
+let activeInferences = 0;
+
 /**
  * Returns true if the request for this tabId should be allowed through.
- * Returns false (rate-limited) if the tab has exceeded its quota.
+ * Checks BOTH the per-tab rate limit AND the global concurrency limit.
  *
  * @param {number} tabId
  * @returns {boolean}
  */
 function isRequestAllowed(tabId) {
+  // ── Global concurrency check ──────────────────────────────────────────
+  if (activeInferences >= MAX_CONCURRENT_INFERENCES) {
+    return false;
+  }
+
+  // ── Per-tab rate limit ────────────────────────────────────────────────
   const now = Date.now();
   const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
@@ -288,6 +344,20 @@ function isRequestAllowed(tabId) {
   return true;
 }
 
+/**
+ * Increments the global inference counter. Call before dispatching ML work.
+ */
+function acquireInferenceSlot() {
+  activeInferences++;
+}
+
+/**
+ * Decrements the global inference counter. Call in .then()/.catch()/.finally().
+ */
+function releaseInferenceSlot() {
+  activeInferences = Math.max(0, activeInferences - 1);
+}
+
 // Prune stale tab entries every 60s to prevent unbounded memory growth
 setInterval(() => {
   const now = Date.now();
@@ -305,6 +375,9 @@ setInterval(() => {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+
+  // Ignore messages targeted at the offscreen document (they're not for us)
+  if (request.target === 'offscreen') return false;
 
   // --- Check domain trust status (popup or content script) ---
   if (request.action === 'checkStatus') {
@@ -329,14 +402,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     // ─────────────────────────────────────────────────────────────────────────
 
-    sendToMLWorker('ANALYZE', { text }, 45000)
-      .then(async (results) => {
-        const { status, topMatch } = interpretMLResults(results);
-        const result = { status, topMatch, allScores: results, source: 'ml' };
+    // Acquire a global inference slot before dispatching
+    acquireInferenceSlot();
+
+    sendToOffscreenML('ML_ANALYZE', { text }, 45000)
+      .then(async (response) => {
+        releaseInferenceSlot();
+        if (!response || !response.success) {
+          throw new Error(response?.error || 'Offscreen ML returned failure');
+        }
+        const { status, topMatch } = interpretMLResults(response.results);
+        const result = { status, topMatch, allScores: response.results, source: 'ml' };
         await setSessionCache(`ml_status_${hostname}`, { status, topMatch });
         sendResponse(result);
       })
       .catch((err) => {
+        releaseInferenceSlot();
         console.error('[GhostForm] ML analysis failed:', err);
         sendResponse({ status: 'unknown', source: 'ml_error', error: err.message });
       });
@@ -346,8 +427,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // --- Ping the ML worker to pre-warm it ---
   if (request.action === 'PING_ML') {
-    sendToMLWorker('PING', {}, 60000)
-      .then(() => sendResponse({ ready: true }))
+    sendToOffscreenML('ML_PING', {}, 60000)
+      .then((response) => sendResponse({ ready: response?.ready ?? false }))
       .catch((err) => sendResponse({ ready: false, error: err.message }));
     return true;
   }
@@ -358,6 +439,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return false;
 });
 
-// Pre-warm the ML worker when the service worker starts
-// so the model is loaded before the user needs it
-getMLWorker();
+// Pre-warm the offscreen document and ML pipeline when the service worker starts
+setupOffscreenDocument().then(() => {
+  console.log('[GhostForm] Offscreen document pre-warmed on service worker start.');
+}).catch((err) => {
+  console.warn('[GhostForm] Offscreen pre-warm failed (will retry on first request):', err);
+});
+
