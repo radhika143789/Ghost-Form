@@ -368,6 +368,12 @@ setInterval(() => {
       rateLimitBuckets.delete(tabId);
     }
   }
+  // Hard size cap: if still over limit after time-based eviction, evict oldest
+  // This handles burst scenarios where many tabs open within the 60s window.
+  while (rateLimitBuckets.size > 500) {
+    const oldestTabId = rateLimitBuckets.keys().next().value;
+    rateLimitBuckets.delete(oldestTabId);
+  }
 }, 60_000);
 
 // ---------------------------------------------------------------------------

@@ -12,6 +12,19 @@
 let currentStatus = "safe";
 const ignoredSessionKey = `ghost-form-ignore-${window.location.hostname}`;
 
+// ── Respect the protection toggle from popup ────────────────────────────────
+// If the user paused protection via the popup toggle, bail out immediately.
+// chrome.storage.local is available in content scripts.
+chrome.storage.local.get({ protectionEnabled: true }, ({ protectionEnabled }) => {
+  if (!protectionEnabled) {
+    console.log('[GhostForm] Protection is paused by user. Content script idle.');
+    return;
+  }
+  initGhostForm();
+});
+
+function initGhostForm() {
+
 // Ask background script for status
 chrome.runtime.sendMessage(
   { action: "checkStatus", url: window.location.href },
@@ -180,14 +193,19 @@ function safeExtractText(root = document.body) {
     const sanitizedText = safeExtractText(document.body);
     if (!sanitizedText || sanitizedText.length < 20) return;
 
-    // ── Phase 5: X-Ray Vision ─────────────────────────────────────────────
-    // Run structural DOM fingerprinting in parallel with text-based ML.
-    // Both signals are fused before rendering the final status.
-    const structuralSignal = ghostFormXRay.analyzePageStructure();
-    if (structuralSignal.structuralRisk === 'unsafe') {
-      console.info(
-        `[GhostForm X-Ray] Structural risk: ${structuralSignal.score} (${structuralSignal.matchedTemplate})`
-      );
+    // ── Phase 5: X-Ray Vision (defensive — feature module may not be loaded) ──
+    let structuralSignal = { structuralRisk: 'safe', score: 0, matchedTemplate: null };
+    if (typeof ghostFormXRay !== 'undefined') {
+      try {
+        structuralSignal = ghostFormXRay.analyzePageStructure();
+        if (structuralSignal.structuralRisk === 'unsafe') {
+          console.info(
+            `[GhostForm X-Ray] Structural risk: ${structuralSignal.score} (${structuralSignal.matchedTemplate})`
+          );
+        }
+      } catch (xrayErr) {
+        console.warn('[GhostForm X-Ray] Analysis error:', xrayErr.message);
+      }
     }
 
     chrome.runtime.sendMessage(
@@ -215,11 +233,14 @@ function safeExtractText(root = document.body) {
             currentStatus = 'safe';
           }
 
-          // ── Phase 5: Fine-Print AI ───────────────────────────────────
-          // After we know the page risk level, scan for dark patterns
-          // in consent text. Only fires on risky/unknown pages.
-          if (currentStatus !== 'safe') {
-            ghostFormFinePrint.runFinePrintAnalysis(currentStatus);
+          // ── Phase 5: Fine-Print AI (BUG-14 fix: once per page) ─────────────
+          // sessionStorage key prevents repeated banner stacking on SPA re-routes.
+          const fpKey = `ghost-form-fine-print-${window.location.hostname}`;
+          if (currentStatus !== 'safe' && !sessionStorage.getItem(fpKey)) {
+            sessionStorage.setItem(fpKey, '1');
+            if (typeof ghostFormFinePrint !== 'undefined') {
+              ghostFormFinePrint.runFinePrintAnalysis(currentStatus);
+            }
           }
         }
       }
@@ -235,6 +256,9 @@ function safeExtractText(root = document.body) {
 })();
 
 // --- Warning Logic ---
+/** @type {WeakMap<Element, HTMLElement>} Maps each input to its active warning overlay */
+const _warningElements = new WeakMap();
+
 function showWarning(inputElement) {
   if (isIgnored() || inputElement.hasAttribute("data-ghost-form-active")) return;
   
@@ -259,14 +283,14 @@ function showWarning(inputElement) {
   warningMsg.appendChild(ignoreBtn);
   
   document.body.appendChild(warningMsg);
-  inputElement.ghostFormWarningElement = warningMsg;
+  _warningElements.set(inputElement, warningMsg); // ✅ WeakMap — GC-safe
 
   const updatePosition = () => {
     // Clean up if warning was removed, or if the input was removed from the DOM
-    if (!inputElement.ghostFormWarningElement || !inputElement.isConnected) {
+    if (!_warningElements.has(inputElement) || !inputElement.isConnected) {
       window.removeEventListener('scroll', updatePosition, true);
       window.removeEventListener('resize', updatePosition);
-      if (inputElement.ghostFormWarningElement) {
+      if (_warningElements.has(inputElement)) {
         removeWarning(inputElement);
       }
       return;
@@ -290,9 +314,10 @@ function removeWarning(inputElement) {
   inputElement.removeAttribute("data-ghost-form-active");
   inputElement.classList.remove("ghost-form-unsafe-input");
   
-  if (inputElement.ghostFormWarningElement) {
-    inputElement.ghostFormWarningElement.remove();
-    inputElement.ghostFormWarningElement = null;
+  const warningEl = _warningElements.get(inputElement);
+  if (warningEl) {
+    warningEl.remove();
+    _warningElements.delete(inputElement); // ✅ Allow GC of both nodes
   }
 }
 
@@ -307,11 +332,14 @@ function handleFocus(event) {
       showWarning(target);
     }
 
-    // ── Phase 5: Active Shield — re-check for clickjack on focus ──────────
-    ghostFormActiveShield.handleActiveShieldFocus(event);
+    // ── Phase 5: Active Shield — defensive guard (BUG-13) ───────────────
+    if (typeof ghostFormActiveShield !== 'undefined') {
+      ghostFormActiveShield.handleActiveShieldFocus(event);
+    }
 
-    // ── Phase 5: Ghost Masks — offer alias for email fields on risky sites ─
-    if (currentStatus === 'unknown' || currentStatus === 'unsafe') {
+    // ── Phase 5: Ghost Masks — defensive guard (BUG-13) ────────────────
+    if ((currentStatus === 'unknown' || currentStatus === 'unsafe') &&
+        typeof ghostFormMasks !== 'undefined') {
       ghostFormMasks.offerGhostMask(target, currentStatus);
     }
   }
@@ -507,7 +535,9 @@ const initialScan = () => {
   scanForShadowRoots(document.documentElement);
 
   // ── Phase 5: Active Shield — initial clickjack scan ───────────────────
-  ghostFormActiveShield.runActiveShieldScan(document);
+  if (typeof ghostFormActiveShield !== 'undefined') {
+    ghostFormActiveShield.runActiveShieldScan(document);
+  }
 };
 
 if (typeof requestIdleCallback === 'function') {
@@ -535,4 +565,4 @@ if (typeof ghostFormGhostPrint !== 'undefined') {
     }
     showWarning(element);
   });
-}
+} // end initGhostForm()

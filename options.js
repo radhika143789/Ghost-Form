@@ -8,9 +8,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showStatus(text, isError = false) {
     statusMsg.textContent = text;
-    statusMsg.style.color = isError ? '#f87171' : '#4ade80';
-    statusMsg.style.display = 'block';
-    setTimeout(() => { statusMsg.style.display = 'none'; }, 3000);
+    statusMsg.className = 'status-msg ' + (isError ? 'error' : 'success');
+    clearTimeout(statusMsg._timer);
+    statusMsg._timer = setTimeout(() => {
+      statusMsg.className = 'status-msg';
+    }, 3000);
   }
 
   // Medium #16: Validate that input is a proper hostname.
@@ -89,26 +91,29 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderList(list) {
+    const emptyState = document.getElementById('emptyState');
     whitelistEl.innerHTML = '';
 
     if (list.length === 0) {
-      const li = document.createElement('li');
-      li.textContent = 'No domains whitelisted yet.';
-      li.style.color = '#64748b';
-      whitelistEl.appendChild(li);
+      if (emptyState) emptyState.style.display = 'flex';
       return;
     }
+
+    if (emptyState) emptyState.style.display = 'none';
 
     list.forEach(domain => {
       const li = document.createElement('li');
 
       const span = document.createElement('span');
+      span.className = 'domain-text';
       span.textContent = domain;
       li.appendChild(span);
 
       const btn = document.createElement('button');
-      btn.textContent = 'Remove';
+      btn.innerHTML = '&times;';
       btn.className = 'remove-btn';
+      btn.title = `Remove ${domain}`;
+      btn.setAttribute('aria-label', `Remove ${domain}`);
       btn.onclick = () => removeDomain(domain);
       li.appendChild(btn);
 

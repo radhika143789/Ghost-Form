@@ -1,29 +1,145 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ghost Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhostForm — Privacy Shield</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="logo">GF</div>
-      <h1>Ghost Form</h1>
+
+  <!-- ── HEADER ─────────────────────────────────────────── -->
+  <header class="popup-header">
+    <div class="brand">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 6v6c0 5.25 3.5 10.15 8 11.5C16.5 22.15 20 17.25 20 12V6L12 2z"
+                fill="url(#shieldGrad)" />
+          <path d="M9 12l2 2 4-4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <defs>
+            <linearGradient id="shieldGrad" x1="4" y1="2" x2="20" y2="24" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#7c3aed"/>
+              <stop offset="1" stop-color="#00d4ff"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="brand-name">GhostForm</span>
+      <span class="badge-beta">BETA</span>
     </div>
-    
+    <div class="header-actions">
+      <button id="btnSettings" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── PROTECTION TOGGLE ──────────────────────────────── -->
+  <div class="toggle-row">
+    <div class="toggle-label">
+      <span class="toggle-dot" id="toggleDot"></span>
+      <span id="toggleText">Protection Active</span>
+    </div>
+    <label class="toggle-switch" aria-label="Toggle protection">
+      <input type="checkbox" id="protectionToggle" checked>
+      <span class="toggle-track">
+        <span class="toggle-thumb"></span>
+      </span>
+    </label>
+  </div>
+
+  <!-- ── MAIN STATUS CARD ───────────────────────────────── -->
+  <main class="main-content">
     <div class="status-card" id="statusCard">
-      <div class="status-icon" id="statusIcon"></div>
-      <h2 id="statusTitle">Checking...</h2>
-      <p id="statusDesc">Verifying domain security.</p>
+      <!-- Animated ring -->
+      <div class="status-ring" id="statusRing">
+        <svg class="ring-svg" viewBox="0 0 120 120" aria-hidden="true">
+          <circle class="ring-bg" cx="60" cy="60" r="52" />
+          <circle class="ring-progress" id="ringProgress" cx="60" cy="60" r="52" />
+        </svg>
+        <div class="ring-inner">
+          <div class="status-icon-wrap" id="statusIconWrap">
+            <!-- Icon injected by JS -->
+          </div>
+        </div>
+      </div>
+
+      <div class="status-text-block">
+        <h2 class="status-title" id="statusTitle">Scanning…</h2>
+        <p class="status-desc" id="statusDesc">Verifying domain security in real time.</p>
+      </div>
     </div>
-    
-    <div class="domain-info">
-      Current site: <br>
-      <strong id="currentDomain">...</strong>
+
+    <!-- ── DOMAIN PILL ─────────────────────────────────── -->
+    <div class="domain-pill">
+      <svg class="domain-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+      <span class="domain-text" id="currentDomain">Loading…</span>
+    </div>
+
+    <!-- ── STATS ROW ───────────────────────────────────── -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-value" id="statTrackers">—</span>
+        <span class="stat-label">Trackers<br>Blocked</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <span class="stat-value" id="statForms">—</span>
+        <span class="stat-label">Forms<br>Watched</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <span class="stat-value risk-label" id="statRisk">—</span>
+        <span class="stat-label">Risk<br>Level</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- ── PRIVACY PROOF BAR ──────────────────────────────── -->
+  <div class="privacy-bar">
+    <div class="privacy-item">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <span>No keystroke logging</span>
+    </div>
+    <div class="privacy-item">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <span>100% on-device ML</span>
+    </div>
+    <div class="privacy-item">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00ff88" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      <span>Zero API calls</span>
     </div>
   </div>
+
+  <!-- ── FOOTER ─────────────────────────────────────────── -->
+  <footer class="popup-footer">
+    <button class="footer-btn" id="btnReport" title="Report this site">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+      </svg>
+      Report Site
+    </button>
+    <button class="footer-btn" id="btnHistory" title="View history">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/>
+      </svg>
+      History
+    </button>
+    <a class="footer-btn" href="https://github.com/radhika143789/Ghost-Form" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.4 1.2a11.7 11.7 0 0 1 6.2 0C17.3 5.3 18.3 5.6 18.3 5.6c.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6C20.2 21.4 23.5 17.1 23.5 12 23.5 5.7 18.3.5 12 .5z"/>
+      </svg>
+      GitHub
+    </a>
+  </footer>
+
   <script src="popup.js"></script>
 </body>
 </html>

@@ -212,6 +212,25 @@ self.onmessage = async (event) => {
         console.log('[GhostForm ML Worker] Anchor embeddings restored from session cache.');
       }
       postMessage({ type: 'RESULT', id, payload: 'anchors_restored' });
+
+    } else if (type === 'CONSENT_ANALYZE') {
+      // Fine-Print AI: compare consent text against dark pattern anchor phrases
+      // payload = { consentText: string, anchors: string[] }
+      const { consentText, anchors } = payload;
+      if (!consentText || !Array.isArray(anchors) || anchors.length === 0) {
+        postMessage({ type: 'RESULT', id, payload: [] });
+        return;
+      }
+      // Embed consent text once
+      const consentEmbedding = await computeEmbedding(consentText);
+      // Embed each anchor phrase and compute similarity score
+      const findings = [];
+      for (let i = 0; i < anchors.length; i++) {
+        const anchorEmbedding = await computeEmbedding(anchors[i]);
+        const score = cos_sim(consentEmbedding, anchorEmbedding);
+        findings.push({ index: i, score: parseFloat(score.toFixed(4)) });
+      }
+      postMessage({ type: 'RESULT', id, payload: findings });
     }
 
   } catch (error) {
