@@ -46,6 +46,7 @@ const MAX_FLIGHT_MS           = 1500;// Cap flight times
  *   dwellTimes: number[],
  *   flightTimes: number[],
  *   baseline: { dwellMean: number, dwellStd: number, flightMean: number, flightStd: number }|null,
+ *   baselineCommitted: boolean,
  *   keystrokeCount: number,
  *   anomalyFired: boolean,
  * }} FieldState
@@ -63,14 +64,15 @@ const _fieldStates = new WeakMap();
 function getFieldState(el) {
   if (!_fieldStates.has(el)) {
     _fieldStates.set(el, {
-      lastKeydownTime:  0,
-      lastKeyupTime:    0,
-      lastKey:          '',
-      dwellTimes:       [],
-      flightTimes:      [],
-      baseline:         null,
-      keystrokeCount:   0,
-      anomalyFired:     false,
+      lastKeydownTime:   0,
+      lastKeyupTime:     0,
+      lastKey:           '',
+      dwellTimes:        [],
+      flightTimes:       [],
+      baseline:          null,
+      baselineCommitted: false, // ✅ Set once; prevents drift from long typing sessions
+      keystrokeCount:    0,
+      anomalyFired:      false,
     });
   }
   return _fieldStates.get(el);
@@ -126,8 +128,10 @@ function computeAnomalyDistance(dwell, flight, baseline) {
  * @param {FieldState} state
  */
 function maybeUpdateBaseline(state) {
+  // ✅ Once committed, never rebuild — prevents drift if a different
+  // typist uses the same field later in the session.
+  if (state.baselineCommitted) return;
   if (state.keystrokeCount < MIN_BASELINE_KEYSTROKES) return;
-  if (state.keystrokeCount > MAX_BASELINE_KEYSTROKES) return; // Freeze after learning
 
   const dwellStats  = computeStats(state.dwellTimes);
   const flightStats = computeStats(state.flightTimes);
@@ -138,6 +142,10 @@ function maybeUpdateBaseline(state) {
     flightMean: flightStats.mean,
     flightStd:  flightStats.std,
   };
+
+  // Lock the baseline after MIN_BASELINE_KEYSTROKES
+  state.baselineCommitted = true;
+  console.log('[GhostForm GhostPrint] Baseline committed after', state.keystrokeCount, 'keystrokes.');
 }
 
 // ---------------------------------------------------------------------------
@@ -210,20 +218,25 @@ export function handleGhostPrintKeyup(event) {
     return;
   }
 
-  // Dwell time = time between keydown and keyup for this key
-  const dwell  = Math.min(now - state.lastKeydownTime, MAX_DWELL_MS);
+  // Save previous keyup time BEFORE overwriting (needed for correct flight time)
+  const previousKeyupTime = state.lastKeyupTime;
 
-  // Flight time = time between this keyup and the previous keydown
-  const flight = state.lastKeyupTime > 0
-    ? Math.min(state.lastKeydownTime - state.lastKeyupTime, MAX_FLIGHT_MS)
+  // Dwell time = time between keydown and keyup for this key
+  const dwell = Math.min(now - state.lastKeydownTime, MAX_DWELL_MS);
+
+  // Flight time = time from previous keyup to current keydown (inter-keystroke gap)
+  const flight = previousKeyupTime > 0
+    ? Math.min(state.lastKeydownTime - previousKeyupTime, MAX_FLIGHT_MS)
     : 0;
 
-  state.lastKeyupTime = now;
+  state.lastKeyupTime = now;  // Now update after using previousKeyupTime
   state.keystrokeCount++;
 
   // Only record valid timings (skip very first keystroke for flight)
   if (dwell > 0) state.dwellTimes.push(dwell);
+  if (state.dwellTimes.length > MAX_BASELINE_KEYSTROKES) state.dwellTimes.shift();
   if (flight > 0 && state.keystrokeCount > 1) state.flightTimes.push(flight);
+  if (state.flightTimes.length > MAX_BASELINE_KEYSTROKES) state.flightTimes.shift();
 
   // Try to build or update the baseline
   maybeUpdateBaseline(state);
@@ -235,7 +248,9 @@ export function handleGhostPrintKeyup(event) {
   const distance = computeAnomalyDistance(dwell, flight, state.baseline);
 
   if (distance > ANOMALY_THRESHOLD) {
-    state.anomalyFired = true; // One alert per field session
+    state.anomalyFired = true;
+    // Auto-reset after 30s to allow re-detection if anomaly persists
+    setTimeout(() => { state.anomalyFired = false; }, 30_000);
 
     console.warn(
       `[GhostForm GhostPrint] Anomalous typing detected on ${target.name || target.id || 'field'}. ` +

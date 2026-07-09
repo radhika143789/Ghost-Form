@@ -23,6 +23,24 @@ chrome.storage.local.get({ protectionEnabled: true }, ({ protectionEnabled }) =>
   initGhostForm();
 });
 
+// ── Live toggle: respond immediately if user pauses protection mid-session ──
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !('protectionEnabled' in changes)) return;
+  if (changes.protectionEnabled.newValue === false) {
+    // Remove all active warning overlays
+    document.querySelectorAll('.ghost-form-warning-overlay').forEach(el => el.remove());
+    document.querySelectorAll('.ghost-form-unsafe-input').forEach(el => {
+      el.removeAttribute('data-ghost-form-active');
+      el.classList.remove('ghost-form-unsafe-input');
+    });
+    // Remove Fine-Print AI banner
+    document.getElementById('ghost-fine-print-banner')?.remove();
+    // Remove all Ghost Masks
+    if (typeof ghostFormMasks !== 'undefined') ghostFormMasks.removeAllGhostMasks();
+    console.log('[GhostForm] Protection toggled OFF — all warnings cleared.');
+  }
+});
+
 function initGhostForm() {
 
 // Ask background script for status

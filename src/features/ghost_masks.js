@@ -48,6 +48,8 @@ function generateLocalAlias() {
 
 const MASK_HOST_ATTR    = 'data-ghost-mask-host';
 const MASK_ACTIVE_ATTR  = 'data-ghost-mask-active';
+/** Tracks elements already offered a mask (WeakSet survives React DOM re-adds) */
+const _offeredElements = new WeakSet();
 
 /**
  * Injects a Ghost Mask overlay over the given email/text input.
@@ -76,62 +78,61 @@ export function injectGhostMask(realInput) {
   const host = document.createElement('div');
   host.setAttribute(MASK_HOST_ATTR, 'true');
   host.style.cssText = `
-    position: absolute;
-    top: ${window.scrollY + rect.top}px;
-    left: ${window.scrollX + rect.left}px;
+    position: fixed;
+    top: ${rect.top}px;
+    left: ${rect.left}px;
     width: ${rect.width}px;
     height: ${rect.height}px;
     z-index: 2147483646;
     box-sizing: border-box;
     pointer-events: all;
   `;
+  const controller = new AbortController();
+  const { signal } = controller;
+
+  const updateMaskPosition = () => {
+    if (!realInput.isConnected) {
+      controller.abort(); // ✅ Clean up both listeners at once
+      return;
+    }
+    const r = realInput.getBoundingClientRect();
+    host.style.top    = `${r.top}px`;
+    host.style.left   = `${r.left}px`;
+    host.style.width  = `${r.width}px`;
+    host.style.height = `${r.height}px`;
+  };
+  window.addEventListener('scroll', updateMaskPosition, { capture: true, signal });
+  window.addEventListener('resize', updateMaskPosition, { signal });
 
   // Attach a closed Shadow DOM so page JS cannot access the overlay's content
   const shadow = host.attachShadow({ mode: 'closed' });
 
-  shadow.innerHTML = `
-    <style>
-      :host { display: block; width: 100%; height: 100%; }
-      .mask-input {
-        width: 100%;
-        height: 100%;
-        box-sizing: border-box;
-        border: 2px solid #6c63ff;
-        border-radius: 4px;
-        padding: 0 8px;
-        font-size: 14px;
-        background: #1a1a2e;
-        color: #e0e0e0;
-        outline: none;
-        cursor: text;
-      }
-      .mask-badge {
-        position: absolute;
-        top: -22px;
-        left: 0;
-        font-size: 11px;
-        background: #6c63ff;
-        color: #fff;
-        padding: 2px 6px;
-        border-radius: 3px 3px 0 0;
-        white-space: nowrap;
-        font-family: sans-serif;
-        pointer-events: none;
-      }
-    </style>
-    <div class="mask-badge">🔮 Ghost Mask Active</div>
-    <input
-      class="mask-input"
-      type="text"
-      placeholder="${alias}"
-      value="${alias}"
-      autocomplete="off"
-      spellcheck="false"
-    />
-  `;
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `:host { display: block; width: 100%; height: 100%; }
+    .mask-input { width: 100%; height: 100%; box-sizing: border-box; border: 2px solid #6c63ff;
+      border-radius: 4px; padding: 0 8px; font-size: 14px; background: #1a1a2e;
+      color: #e0e0e0; outline: none; cursor: text; }
+    .mask-badge { position: absolute; top: -22px; left: 0; font-size: 11px;
+      background: #6c63ff; color: #fff; padding: 2px 6px; border-radius: 3px 3px 0 0;
+      white-space: nowrap; font-family: sans-serif; pointer-events: none; }`;
+
+  const badge = document.createElement('div');
+  badge.className = 'mask-badge';
+  badge.textContent = '\uD83D\uDD2E Ghost Mask Active';
+
+  const overlayInput = document.createElement('input');
+  overlayInput.className = 'mask-input';
+  overlayInput.type = 'text';
+  overlayInput.setAttribute('autocomplete', 'off');
+  overlayInput.setAttribute('spellcheck', 'false');
+  overlayInput.placeholder = alias;
+  overlayInput.value = alias;
+
+  shadow.appendChild(styleEl);
+  shadow.appendChild(badge);
+  shadow.appendChild(overlayInput);
 
   // When the user edits the overlay input, sync to the real input
-  const overlayInput = shadow.querySelector('.mask-input');
   overlayInput.addEventListener('input', () => {
     realInput.value = overlayInput.value;
     realInput.dispatchEvent(new Event('input', { bubbles: true }));
@@ -153,7 +154,7 @@ export function injectGhostMask(realInput) {
 // 3. Offer UI: Non-intrusive mask offer banner
 // ---------------------------------------------------------------------------
 
-const OFFER_ATTR = 'data-ghost-mask-offered';
+
 
 /**
  * Shows a non-intrusive "Mask this email?" offer banner above the input.
@@ -164,7 +165,7 @@ const OFFER_ATTR = 'data-ghost-mask-offered';
  */
 export function offerGhostMask(inputEl, riskLevel = 'unknown') {
   if (!inputEl || !inputEl.isConnected) return;
-  if (inputEl.hasAttribute(OFFER_ATTR)) return;
+  if (_offeredElements.has(inputEl)) return;
   if (inputEl.hasAttribute(MASK_ACTIVE_ATTR)) return;
 
   // Only offer masking on email and text fields (not password fields)
@@ -174,7 +175,7 @@ export function offerGhostMask(inputEl, riskLevel = 'unknown') {
     if (type !== 'email') return;
   }
 
-  inputEl.setAttribute(OFFER_ATTR, 'true');
+  _offeredElements.add(inputEl);
 
   const rect   = inputEl.getBoundingClientRect();
   const banner = document.createElement('div');
@@ -198,24 +199,28 @@ export function offerGhostMask(inputEl, riskLevel = 'unknown') {
     white-space: nowrap;
   `;
 
-  const riskIcon = riskLevel === 'unsafe' ? '🔴' : '🟡';
-  banner.innerHTML = `
-    <span>${riskIcon} <strong>Ghost Form</strong>: Unverified site</span>
-    <button id="gf-mask-yes" style="
-      background: #6c63ff; color: #fff; border: none;
-      border-radius: 4px; padding: 3px 10px; cursor: pointer;
-      font-size: 11px; font-weight: 600;
-    ">🔮 Use Mask</button>
-    <button id="gf-mask-no" style="
-      background: transparent; color: #aaa; border: 1px solid #555;
-      border-radius: 4px; padding: 3px 8px; cursor: pointer;
-      font-size: 11px;
-    ">No thanks</button>
-  `;
+  // ✅ Build buttons with createElement to avoid duplicate-ID collision
+  // on pages with multiple masked inputs
+  const riskIcon = riskLevel === 'unsafe' ? '\uD83D\uDD34' : '\uD83D\uDFE1';
+
+  const infoSpan = document.createElement('span');
+  infoSpan.innerHTML = `${riskIcon} <strong>Ghost Form</strong>: Unverified site`;
+
+  const yesBtn = document.createElement('button');
+  yesBtn.textContent = '\uD83D\uDD2E Use Mask';
+  yesBtn.style.cssText = 'background:#6c63ff;color:#fff;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px;font-weight:600;';
+
+  const noBtn = document.createElement('button');
+  noBtn.textContent = 'No thanks';
+  noBtn.style.cssText = 'background:transparent;color:#aaa;border:1px solid #555;border-radius:4px;padding:3px 8px;cursor:pointer;font-size:11px;';
+
+  banner.appendChild(infoSpan);
+  banner.appendChild(yesBtn);
+  banner.appendChild(noBtn);
 
   document.body.appendChild(banner);
 
-  banner.querySelector('#gf-mask-yes').addEventListener('click', (e) => {
+  yesBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     banner.remove();
@@ -225,7 +230,7 @@ export function offerGhostMask(inputEl, riskLevel = 'unknown') {
     }
   });
 
-  banner.querySelector('#gf-mask-no').addEventListener('click', (e) => {
+  noBtn.addEventListener('click', (e) => {
     e.preventDefault();
     banner.remove();
   });

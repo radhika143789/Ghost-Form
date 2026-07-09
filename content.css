@@ -57,3 +57,52 @@
     transform: translateY(0);
   }
 }
+
+/* =====================================================================
+   Active Shield — Clickjack Warning Banner (active_shield.js)
+   ===================================================================== */
+.ghost-shield-clickjack-warning {
+  position: absolute;
+  z-index: 2147483647;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid #6c63ff;
+  border-left: 3px solid #ff6b6b;
+  color: #e0e0e0;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.3);
+  animation: ghost-form-fade-in 0.25s ease-out forwards;
+  max-width: 340px;
+  white-space: nowrap;
+}
+
+.ghost-shield-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ghost-shield-message {
+  color: #e0e0e0;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* =====================================================================
+   Fine-Print AI — ghostFadeIn keyframe (fine_print_ai.js)
+   ===================================================================== */
+@keyframes ghostFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

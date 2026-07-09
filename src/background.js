@@ -462,9 +462,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .then((response) => {
         if (response?.success) {
           // Map raw similarity scores back to labeled findings
+          // ✅ Use match.index (not array position) so labels survive anchor reordering
           const findings = (response.findings || [])
-            .map((match, i) => ({ ...DARK_PATTERN_LABELS[i], score: match.score }))
-            .filter(f => f.score >= 0.6); // Only report above 60% similarity threshold
+            .map((match) => {
+              const label = DARK_PATTERN_LABELS[match.index];
+              if (!label) return null;
+              return { ...label, score: match.score };
+            })
+            .filter(f => f !== null && f.score >= 0.6);
           sendResponse({ findings });
         } else {
           sendResponse({ findings: [] });
