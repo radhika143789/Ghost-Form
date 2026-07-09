@@ -531,6 +531,19 @@ const observer = new MutationObserver((mutations) => {
     for (const node of mutation.addedNodes) {
       if (node.nodeType === Node.ELEMENT_NODE) {
         _pendingScanNodes.add(node);
+
+        // Task 2 fix — Active Shield stale scan:
+        // Clear the "already checked" marker from any inputs inside newly-added
+        // subtrees. This forces Active Shield to re-evaluate them on the next
+        // scan pass, catching overlays injected AFTER the initial page load.
+        if (node.querySelectorAll) {
+          node.querySelectorAll('[data-ghost-shield-checked]')
+            .forEach(el => el.removeAttribute('data-ghost-shield-checked'));
+        }
+        // Also clear the marker if the node itself is an input
+        if (node.hasAttribute?.('data-ghost-shield-checked')) {
+          node.removeAttribute('data-ghost-shield-checked');
+        }
       }
     }
   }
@@ -577,10 +590,21 @@ if (typeof ghostFormGhostPrint !== 'undefined') {
   ghostFormGhostPrint.attachGhostPrintListeners(document);
   ghostFormGhostPrint.onGhostPrintAnomaly(({ element, score, message }) => {
     console.warn(`[GhostForm GhostPrint] Anomaly on ${element.name || 'password field'}: ${message}`);
+
     // Escalate to unknown if we were safe — RAT injection risk
     if (currentStatus === 'safe') {
       currentStatus = 'unknown';
     }
     showWarning(element);
+
+    // Task 3 fix — GhostPrint → Fine-Print AI pipeline:
+    // When a biometric anomaly fires (possible RAT/bot typing), escalate by
+    // also running Fine-Print AI consent analysis. This catches scenarios where
+    // the user's session is being hijacked mid-form on a page that initially
+    // looked safe. Only run once per anomaly event (30s cooldown in GhostPrint).
+    if (typeof ghostFormFinePrint !== 'undefined') {
+      ghostFormFinePrint.runFinePrintAnalysis(currentStatus)
+        .catch(err => console.warn('[GhostForm] Fine-Print AI post-anomaly failed:', err.message));
+    }
   });
 } // end initGhostForm()

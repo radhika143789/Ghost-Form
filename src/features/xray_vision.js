@@ -27,40 +27,241 @@
 // the output here.
 
 const BRAND_TEMPLATES = [
+  // ─────────────────────────────────────────────────────────────────────────
+  // GENERIC: Broad phishing page fingerprint.
+  // Weight is intentionally low (0.6) to prevent false positives on real
+  // login pages. Only escalates to 'unsafe' at XRAY_HIGH_RISK (0.88).
+  // ─────────────────────────────────────────────────────────────────────────
   {
     brand: 'generic_login',
     label: 'Generic Login Page',
-    // Characteristics of a typical credential-harvesting login form:
     features: {
-      hasPasswordField: true,
-      hasEmailOrUsernameField: true,
-      inputCount: [1, 4],     // [min, max] inputs on the page
-      formCount:  [1, 2],     // [min, max] forms
-      hasLogoRegion: true,    // Image or logo-like element near top
-      logoToFormProximityNorm: [0, 0.4], // logo is in the top 40% of viewport
-      formVerticalCenterNorm: [0.3, 0.7], // form is vertically centered
-      submitButtonPresent: true,
-      externalLinkCount: [0, 5], // minimal outbound links (phishing pages are sparse)
-      textDensityRatio: [0, 0.3], // low text-to-form ratio (mostly form, little prose)
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 4],
+      formCount:                   [1, 2],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.4],
+      formVerticalCenterNorm:      [0.3, 0.7],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 3],   // tightened from 5 → 3
+      textDensityRatio:            [0, 0.2], // tightened from 0.3 → 0.2
+    },
+    weight: 0.6, // reduced from 1.0 — prevents false positives
+  },
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // BRAND-SPECIFIC TEMPLATES  (weight 0.85–1.0)
+  // Each template captures the structural signature of a real brand's login
+  // page. Phishing kits that clone these layouts will match closely.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  {
+    brand: 'paypal',
+    label: 'PayPal Login',
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 3],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.25],
+      formVerticalCenterNorm:      [0.25, 0.55],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 4],
+      textDensityRatio:            [0, 0.2],
     },
     weight: 1.0,
   },
+
   {
-    brand: 'paypal_style',
-    label: 'PayPal-style Login',
+    brand: 'microsoft',
+    label: 'Microsoft / Office 365 Login',
+    // Microsoft login: single email field first, then password on next step.
+    // Cloned pages often show both fields at once.
     features: {
-      hasPasswordField: true,
-      hasEmailOrUsernameField: true,
-      inputCount: [1, 3],
-      formCount:  [1, 1],
-      hasLogoRegion: true,
-      logoToFormProximityNorm: [0, 0.3],
-      formVerticalCenterNorm: [0.25, 0.6],
-      submitButtonPresent: true,
-      externalLinkCount: [0, 3],
-      textDensityRatio: [0, 0.25],
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 3],
+      formCount:                   [1, 2],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.3, 0.65],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 6],
+      textDensityRatio:            [0, 0.25],
+    },
+    weight: 1.0,
+  },
+
+  {
+    brand: 'apple',
+    label: 'Apple ID Login',
+    // Apple: clean minimal form, very low external link count.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 3],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.2],
+      formVerticalCenterNorm:      [0.3, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 3],
+      textDensityRatio:            [0, 0.15],
+    },
+    weight: 1.0,
+  },
+
+  {
+    brand: 'google',
+    label: 'Google Account Sign-in',
+    // Google: prominent logo top-center, single field, very sparse links.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 2],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.25],
+      formVerticalCenterNorm:      [0.3, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 4],
+      textDensityRatio:            [0, 0.2],
+    },
+    weight: 1.0,
+  },
+
+  {
+    brand: 'amazon',
+    label: 'Amazon Sign-in',
+    // Amazon: two fields (email + password), moderate external link count.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [2, 4],
+      formCount:                   [1, 2],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.2, 0.55],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 8],
+      textDensityRatio:            [0, 0.3],
+    },
+    weight: 0.95,
+  },
+
+  {
+    brand: 'facebook',
+    label: 'Facebook Login',
+    // Facebook: two fields side by side or stacked, always has logo.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [2, 5],
+      formCount:                   [1, 2],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.35],
+      formVerticalCenterNorm:      [0.2, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 6],
+      textDensityRatio:            [0, 0.3],
+    },
+    weight: 0.95,
+  },
+
+  {
+    brand: 'instagram',
+    label: 'Instagram Login',
+    // Instagram: minimal form, very few external links.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [2, 4],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.25, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 4],
+      textDensityRatio:            [0, 0.2],
     },
     weight: 0.9,
+  },
+
+  {
+    brand: 'netflix',
+    label: 'Netflix Sign-in',
+    // Netflix: dark background, centered form, very few links.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [2, 3],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.3, 0.65],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 3],
+      textDensityRatio:            [0, 0.2],
+    },
+    weight: 0.9,
+  },
+
+  {
+    brand: 'chase_bank',
+    label: 'Chase Bank Login',
+    // Banking portals: tight input constraints, very few external links.
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 3],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.2, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 5],
+      textDensityRatio:            [0, 0.2],
+    },
+    weight: 1.0,
+  },
+
+  {
+    brand: 'dropbox',
+    label: 'Dropbox Login',
+    features: {
+      hasPasswordField:            true,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [1, 3],
+      formCount:                   [1, 1],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.3],
+      formVerticalCenterNorm:      [0.25, 0.6],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 4],
+      textDensityRatio:            [0, 0.2],
+    },
+    weight: 0.85,
+  },
+
+  {
+    brand: 'dhl_fedex',
+    label: 'DHL / FedEx / Delivery Phish',
+    // Parcel delivery phishing: often asks for card details, has tracking form.
+    features: {
+      hasPasswordField:            false,
+      hasEmailOrUsernameField:     true,
+      inputCount:                  [2, 6],
+      formCount:                   [1, 2],
+      hasLogoRegion:               true,
+      logoToFormProximityNorm:     [0, 0.35],
+      formVerticalCenterNorm:      [0.2, 0.65],
+      submitButtonPresent:         true,
+      externalLinkCount:           [0, 5],
+      textDensityRatio:            [0, 0.35],
+    },
+    weight: 0.85,
   },
 ];
 
@@ -202,8 +403,9 @@ function scoreAgainstTemplate(skeleton, template) {
 // 4. Public API
 // ---------------------------------------------------------------------------
 
-const XRAY_HIGH_RISK   = 0.80;
+const XRAY_HIGH_RISK   = 0.88; // raised: compensates for reduced generic_login weight (0.6)
 const XRAY_MEDIUM_RISK = 0.60;
+
 
 /**
  * Runs X-Ray Vision structural analysis on the current page.
