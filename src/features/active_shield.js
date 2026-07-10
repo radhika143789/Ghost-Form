@@ -113,7 +113,14 @@ function isInvisibleOverlay(el) {
   const isTransparent = !bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)';
   const isNearInvisible = !isNaN(opacity) && opacity < 0.1;
 
-  return isTransparent || isNearInvisible;
+  // Must also be positioned (absolute/fixed) to be a real overlay threat
+  const isPositioned = style.position === 'absolute' || style.position === 'fixed';
+
+  // Must cover a meaningful area (> 200px²) to matter
+  const rect = el.getBoundingClientRect();
+  const coversMeaningfulArea = (rect.width * rect.height) > 200;
+
+  return (isTransparent || isNearInvisible) && isPositioned && coversMeaningfulArea;
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +168,7 @@ function neutralizeClickjack(inputEl, offender, reason) {
 
     // Position anchored to the input
     const rect = inputEl.getBoundingClientRect();
-    warning.style.top  = `${window.scrollY + rect.top - warning.offsetHeight - 6}px`;
+    warning.style.top  = `${window.scrollY + rect.top - 42 - 6}px`;
     warning.style.left = `${window.scrollX + rect.left}px`;
 
     // Auto-dismiss after 8 seconds
@@ -205,6 +212,8 @@ export function runActiveShieldScan(root = document) {
   }
 
   // Also check for suspicious full-page iframes
+  // Iframes cannot exist inside Shadow DOM — only scan document roots
+  if (root !== document && !(root instanceof Document)) return;
   const iframes = root.querySelectorAll('iframe');
   for (const iframe of iframes) {
     if (_blockedElements.has(iframe)) continue;

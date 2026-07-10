@@ -109,6 +109,14 @@ const SIMILARITY_THRESHOLDS = {
   MEDIUM_RISK: 0.65, // Suspicious similarity to a known brand
 };
 
+// ---------------------------------------------------------------------------
+// Reputation Cache TTL Configuration
+// ---------------------------------------------------------------------------
+/** Primary TTL: cached results expire after 5 minutes */
+const REPUTATION_TTL_MS = 5 * 60 * 1000;
+/** Grace-period TTL: last-known-good results survive up to 15 minutes */
+const REPUTATION_GRACE_TTL_MS = 15 * 60 * 1000;
+
 /**
  * Translates ML similarity scores into Ghost Form's 3-state status model.
  * 
@@ -174,6 +182,17 @@ const MAX_CACHED_DOMAINS = 150;
 /** @type {Map<string, any>} LRU: oldest entries at the front, newest at the back */
 const _sessionLRU = new Map();
 
+/**
+ * Grace-period cache: stores the last known-good result per hostname.
+ * Consulted when the ML pipeline fails (timeout, rate-limit, offscreen error)
+ * to avoid showing 'unknown' to users when we have a recent safe result.
+ *
+ * Structure: hostname → { status, topMatch, cachedAt: number }
+ * @type {Map<string, {status: string, topMatch: object|null, cachedAt: number}>}
+ */
+const _graceCache = new Map();
+const MAX_GRACE_CACHE = 200;
+
 /** @type {boolean} Whether the LRU has been primed from storage */
 let _lruPrimed = false;
 
@@ -209,8 +228,17 @@ async function getSessionCache(key) {
 
   if (!_sessionLRU.has(key)) return null;
 
-  // Move to end (most recently used)
   const value = _sessionLRU.get(key);
+  
+  // TTL eviction: treat expired entries as a cache miss
+  if (value.cachedAt && (Date.now() - value.cachedAt) > REPUTATION_TTL_MS) {
+    _sessionLRU.delete(key);
+    chrome.storage.session.remove(key).catch(() => {});
+    console.log(`[GhostForm] Cache TTL expired for ${key}`);
+    return null;
+  }
+
+  // Move to end (most recently used)
   _sessionLRU.delete(key);
   _sessionLRU.set(key, value);
 
@@ -231,12 +259,42 @@ async function setSessionCache(key, value) {
     chrome.storage.session.remove(oldestKey).catch(() => {});
   }
 
+  value.cachedAt = Date.now();
   _sessionLRU.set(key, value);
 
   // Persist to session storage (fire-and-forget, non-blocking)
   chrome.storage.session.set({ [key]: value }).catch((err) => {
     console.warn('[GhostForm] Session cache write failed (quota?):', err.message);
   });
+}
+
+function _updateGraceCache(hostname, status, topMatch) {
+  // Only cache definitive results in the grace cache (not unknown/error)
+  if (status === 'safe' || status === 'unsafe') {
+    // Evict oldest if at capacity
+    if (_graceCache.size >= MAX_GRACE_CACHE) {
+      const oldestKey = _graceCache.keys().next().value;
+      _graceCache.delete(oldestKey);
+    }
+    _graceCache.set(hostname, { status, topMatch, cachedAt: Date.now() });
+  }
+}
+
+/**
+ * Returns the grace-period cached result for a hostname if it exists
+ * and has not exceeded REPUTATION_GRACE_TTL_MS. Returns null otherwise.
+ *
+ * @param {string} hostname
+ * @returns {{status: string, topMatch: object|null}|null}
+ */
+function getGraceCacheEntry(hostname) {
+  const entry = _graceCache.get(hostname);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > REPUTATION_GRACE_TTL_MS) {
+    _graceCache.delete(hostname);
+    return null;
+  }
+  return { status: entry.status, topMatch: entry.topMatch };
 }
 
 // ---------------------------------------------------------------------------
@@ -399,11 +457,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // ── Circuit Breaker ──────────────────────────────────────────────────────
     if (!isRequestAllowed(tabId)) {
       console.warn(`[GhostForm] Rate limit exceeded for tab ${tabId}. Request dropped.`);
-      sendResponse({
-        status: 'unknown',
-        source: 'rate_limited',
-        message: 'Too many inference requests. Max 1 per second per tab.',
-      });
+      const rateLimitGrace = getGraceCacheEntry(hostname);
+      if (rateLimitGrace) {
+        sendResponse({ ...rateLimitGrace, source: 'grace_cache_rate_limited' });
+      } else {
+        sendResponse({
+          status: 'unknown',
+          source: 'rate_limited',
+          message: 'Too many inference requests. Max 1 per second per tab.',
+        });
+      }
       return true;
     }
     // ─────────────────────────────────────────────────────────────────────────
@@ -420,12 +483,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const { status, topMatch } = interpretMLResults(response.results);
         const result = { status, topMatch, allScores: response.results, source: 'ml' };
         await setSessionCache(`ml_status_${hostname}`, { status, topMatch });
+        _updateGraceCache(hostname, status, topMatch);
         sendResponse(result);
       })
       .catch((err) => {
         releaseInferenceSlot();
         console.error('[GhostForm] ML analysis failed:', err);
-        sendResponse({ status: 'unknown', source: 'ml_error', error: err.message });
+
+        // Grace-period fallback: if we have a recent known-good result,
+        // serve it instead of bubbling 'unknown' to the user.
+        const graceFallback = getGraceCacheEntry(hostname);
+        if (graceFallback) {
+          console.log(`[GhostForm] Serving grace-cache fallback for ${hostname}: ${graceFallback.status}`);
+          sendResponse({ ...graceFallback, source: 'grace_cache' });
+        } else {
+          sendResponse({ status: 'unknown', source: 'ml_error', error: err.message });
+        }
       });
 
     return true; // async response

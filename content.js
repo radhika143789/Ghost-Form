@@ -12,6 +12,10 @@
 let currentStatus = "safe";
 const ignoredSessionKey = `ghost-form-ignore-${window.location.hostname}`;
 
+// Per-session nonce for warning integrity verification.
+// Used to distinguish real Ghost Form warnings from page-injected fakes.
+const GHOST_NONCE = Math.random().toString(36).slice(2);
+
 // ── Respect the protection toggle from popup ────────────────────────────────
 // If the user paused protection via the popup toggle, bail out immediately.
 // chrome.storage.local is available in content scripts.
@@ -71,10 +75,31 @@ function setIgnored() {
   document.querySelectorAll(".ghost-form-unsafe-input").forEach(removeWarning);
 }
 
-// Luhn Algorithm validation for Credit Cards
+// Luhn Algorithm + BIN prefix validation for Credit Cards
+// BIN prefix check reduces false positives from arbitrary digit strings.
 function isValidCreditCard(value) {
   const digits = value.replace(/\D/g, '');
   if (digits.length < 13 || digits.length > 19) return false;
+
+  // BIN prefix check — only flag known card network patterns:
+  // Visa: starts with 4 (13 or 16 digits)
+  // Mastercard: starts with 51-55 or 2221-2720 (16 digits)
+  // Amex: starts with 34 or 37 (15 digits)
+  // Discover: starts with 6011, 622126-622925, 644-649, or 65 (16 digits)
+  // UnionPay: starts with 62 (16-19 digits)
+  const BIN_PATTERNS = [
+    /^4\d{12}(?:\d{3})?$/,                    // Visa
+    /^5[1-5]\d{14}$/,                          // Mastercard classic
+    /^2(?:2[2-9][1-9]|[3-6]\d{2}|7[01]\d|720)\d{12}$/, // Mastercard 2-series
+    /^3[47]\d{13}$/,                           // Amex
+    /^6(?:011|22(?:1(?:2[6-9]|[3-9]\d)|[2-8]\d{2}|9(?:[01]\d|2[0-5]))|4[4-9]\d|5\d{2})\d{12}$/, // Discover
+    /^62\d{14,17}$/,                           // UnionPay
+  ];
+
+  // Must match at least one known BIN prefix
+  if (!BIN_PATTERNS.some(pattern => pattern.test(digits))) return false;
+
+  // Luhn algorithm
   let sum = 0;
   let isEven = false;
   for (let i = digits.length - 1; i >= 0; i--) {
@@ -87,6 +112,57 @@ function isValidCreditCard(value) {
     isEven = !isEven;
   }
   return sum % 10 === 0;
+}
+
+/**
+ * Detects locale-aware phone number patterns in user input.
+ * Covers: US/Canada (NANP), India (+91), UK (+44/07), and generic E.164.
+ * Returns true only for plausibly real phone numbers — not all digit strings.
+ *
+ * @param {string} value - The raw input value.
+ * @returns {boolean} True if matches a PII phone number profile.
+ */
+function isPIIPhone(value) {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length < 7) return false; // Too short to be PII
+
+  // NANP (US/Canada): 10 digits, area code and exchange cannot start with 0 or 1
+  if (/^1?[2-9]\d{2}[2-9]\d{6}$/.test(digits)) return true;
+
+  // India: 10 digits starting with 6-9 (optional 91 prefix)
+  if (/^(?:91)?[6-9]\d{9}$/.test(digits)) return true;
+
+  // UK: Mobile starts with 07, landlines 01/02
+  if (/^(?:44)?(?:7\d{9}|[12]\d{9})$/.test(digits)) return true;
+
+  // Generic E.164: must strictly start with '+'
+  if (value.trim().startsWith('+') && /^\+\d{7,15}$/.test(value.replace(/[\s-]/g, ''))) return true;
+
+  return false;
+}
+
+/**
+ * Validates US Social Security Numbers (SSN).
+ * Accepts raw 9 digits or standard 3-2-4 hyphenation.
+ * Filters out known invalid blocks (e.g. 000 area, 666, 900+).
+ */
+function isSSN(value) {
+  // Check format: either 9 raw digits or XXX-XX-XXXX
+  if (!/^\d{9}$/.test(value) && !/^\d{3}-\d{2}-\d{4}$/.test(value)) return false;
+  
+  const clean = value.replace(/\D/g, '');
+  if (clean.length !== 9) return false;
+
+  const area = parseInt(clean.substring(0, 3), 10);
+  const group = parseInt(clean.substring(3, 5), 10);
+  const serial = parseInt(clean.substring(5, 9), 10);
+
+  // SSA rules for invalid SSNs:
+  if (area === 0 || area === 666 || area >= 900) return false;
+  if (group === 0) return false;
+  if (serial === 0) return false;
+
+  return true;
 }
 
 // Debounce function to prevent UI lag on keypress
@@ -283,25 +359,68 @@ function showWarning(inputElement) {
   inputElement.setAttribute("data-ghost-form-active", "true");
   inputElement.classList.add("ghost-form-unsafe-input");
 
+  // A bare div shadowHost is appended to document.body.
+  const shadowHost = document.createElement("div");
+  shadowHost.setAttribute('data-ghost-form-host', GHOST_NONCE);
+  shadowHost.style.cssText = 'all:initial; position:absolute; z-index:2147483647; pointer-events:none;';
+  const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+
+  // Add scoped styles
+  const style = document.createElement('style');
+  style.textContent = `
+    .gf-warning {
+      background: #ff4d4f;
+      color: white;
+      padding: 12px;
+      border-radius: 8px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      box-shadow: 0 4px 12px rgba(255, 77, 79, 0.4);
+      animation: gf-fade-in 0.2s ease-out;
+      pointer-events: all;
+    }
+    .gf-ignore-btn {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 4px;
+      margin-top: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .gf-ignore-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    @keyframes gf-fade-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  `;
+  shadowRoot.appendChild(style);
+
   const warningMsg = document.createElement("div");
-  warningMsg.className = "ghost-form-warning-overlay";
+  warningMsg.className = "gf-warning";
+  warningMsg.setAttribute('data-ghost-token', GHOST_NONCE);
   
   const textNode = document.createElement("div");
   textNode.innerText = "Ghost Form: Unverified domain. High risk form detected.";
   warningMsg.appendChild(textNode);
 
   const ignoreBtn = document.createElement("button");
-  ignoreBtn.className = "ghost-form-ignore-btn";
+  ignoreBtn.className = "gf-ignore-btn";
   ignoreBtn.innerText = "Ignore for this session";
-  ignoreBtn.onclick = (e) => {
+  ignoreBtn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     setIgnored();
-  };
+  });
   warningMsg.appendChild(ignoreBtn);
   
-  document.body.appendChild(warningMsg);
-  _warningElements.set(inputElement, warningMsg); // ✅ WeakMap — GC-safe
+  shadowRoot.appendChild(warningMsg);
+  document.body.appendChild(shadowHost);
+  _warningElements.set(inputElement, shadowHost); // ✅ WeakMap — GC-safe
 
   const updatePosition = () => {
     // Clean up if warning was removed, or if the input was removed from the DOM
@@ -314,28 +433,46 @@ function showWarning(inputElement) {
       return;
     }
     const currentRect = inputElement.getBoundingClientRect();
-    warningMsg.style.top = `${window.scrollY + currentRect.bottom + 8}px`;
-    warningMsg.style.left = `${window.scrollX + currentRect.left}px`;
+    shadowHost.style.top = `${window.scrollY + currentRect.bottom + 8}px`;
+    shadowHost.style.left = `${window.scrollX + currentRect.left}px`;
   };
 
   // Initial position
   updatePosition();
 
   // High #7: Fix warning overlay drift on scroll/resize.
-  // Add listeners (capture phase for scroll to catch inner containers) to keep
-  // the overlay glued to the input field, since we removed the handleBlur cleanup.
   window.addEventListener('scroll', updatePosition, true);
   window.addEventListener('resize', updatePosition);
+
+  // Anti-removal guard
+  const spoofGuard = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      for (const removedNode of mutation.removedNodes) {
+        if (removedNode === shadowHost) {
+          if (!isIgnored() && inputElement.isConnected) {
+            document.body.appendChild(shadowHost);
+            updatePosition();
+            console.warn('[GhostForm] Anti-spoofing: warning re-injected after external removal attempt.');
+          }
+        }
+      }
+    }
+  });
+  spoofGuard.observe(document.body, { childList: true });
+  shadowHost._ghostSpoofGuard = spoofGuard;
 }
 
 function removeWarning(inputElement) {
   inputElement.removeAttribute("data-ghost-form-active");
   inputElement.classList.remove("ghost-form-unsafe-input");
-  
-  const warningEl = _warningElements.get(inputElement);
-  if (warningEl) {
-    warningEl.remove();
-    _warningElements.delete(inputElement); // ✅ Allow GC of both nodes
+
+  const shadowHost = _warningElements.get(inputElement);
+  if (shadowHost) {
+    if (shadowHost._ghostSpoofGuard) {
+      shadowHost._ghostSpoofGuard.disconnect();
+    }
+    shadowHost.remove();
+    _warningElements.delete(inputElement);
   }
 }
 
@@ -376,12 +513,15 @@ const debouncedInputCheck = debounce((event) => {
   if (isTargetInput(target)) {
     const val = target.value || target.innerText || "";
     
-    // Check if Password or valid CC
     const isPassword = target.tagName === "INPUT" && target.type.toLowerCase() === "password";
     const isCC = isValidCreditCard(val);
+    const isPhone = isPIIPhone(val);
+    const isSocSec = isSSN(val);
+    const fieldType = target.type ? target.type.toLowerCase() : '';
+    const isSearchField = fieldType === 'search' || target.getAttribute('role') === 'searchbox';
     
     // Yellow state: Trigger warning if high-risk data is typed
-    if (isPassword || isCC) {
+    if (isPassword || isCC || (!isSearchField && (isPhone || isSocSec))) {
       showWarning(target);
     }
   }
