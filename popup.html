@@ -72,6 +72,13 @@
         <h2 class="status-title" id="statusTitle">Scanning…</h2>
         <p class="status-desc" id="statusDesc">Verifying domain security in real time.</p>
       </div>
+
+      <div class="status-insight" id="statusInsight">Checking the current page locally for phishing indicators.</div>
+
+      <div class="status-pill-row">
+        <div class="status-pill" id="statusPill">Monitoring</div>
+        <div class="status-pill secondary" id="statusMetaLocal">On-device checks</div>
+      </div>
     </div>
 
     <!-- ── DOMAIN PILL ─────────────────────────────────── -->
@@ -98,6 +105,18 @@
       <div class="stat-card">
         <span class="stat-value risk-label" id="statRisk">—</span>
         <span class="stat-label">Risk<br>Level</span>
+      </div>
+    </div>
+
+    <div class="privacy-card">
+      <div class="privacy-card-header">
+        <span class="privacy-card-title">Privacy at a glance</span>
+        <span class="privacy-card-badge" id="statusMetaPrivacy">Zero keystroke logging</span>
+      </div>
+      <div class="privacy-card-body">
+        <div class="privacy-chip">No keystrokes stored</div>
+        <div class="privacy-chip">On-device ML</div>
+        <div class="privacy-chip">No form data sent</div>
       </div>
     </div>
   </main>
@@ -140,6 +159,6 @@
     </a>
   </footer>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

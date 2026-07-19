@@ -1,0 +1,12 @@
+<!DOCTYPE html><html><body>
+  <div id="shadow-host"></div>
+  <script>
+    const host = document.getElementById('shadow-host');
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <form>
+        <input id="shadow-password" type="password" placeholder="Shadow password">
+        <button type="submit">Login</button>
+      </form>`;
+  </script>
+</body></html>

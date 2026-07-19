@@ -1,0 +1,13 @@
+<!DOCTYPE html><html><body>
+  <div id="closed-shadow-host"></div>
+  <script>
+    const host = document.getElementById('closed-shadow-host');
+    const shadow = host.attachShadow({ mode: 'closed' });
+    shadow.innerHTML = `
+      <form>
+        <input id="closed-password" type="password" placeholder="Closed shadow password">
+        <button type="submit">Login</button>
+      </form>`;
+    window._testClosedInput = shadow.querySelector('#closed-password');
+  </script>
+</body></html>

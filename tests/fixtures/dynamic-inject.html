@@ -1,0 +1,10 @@
+<!DOCTYPE html><html><body>
+  <div id="container"></div>
+  <script>
+    setTimeout(() => {
+      const form = document.createElement('form');
+      form.innerHTML = '<input id="dynamic-password" type="password" placeholder="Dynamic password">';
+      document.getElementById('container').appendChild(form);
+    }, 300);
+  </script>
+</body></html>

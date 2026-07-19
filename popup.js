@@ -1,3 +1,5 @@
+import { getStatusMeta } from './src/popup_ui_state.js';
+
 /* ── SVG Icon helpers ─────────────────────────────────── */
 
 const ICONS = {
@@ -113,38 +115,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
 /* ── updateUI ─────────────────────────────────────────── */
 function updateUI(status, trackersBlocked = 0, formsWatched = 0) {
-  const card        = document.getElementById('statusCard');
-  const title       = document.getElementById('statusTitle');
-  const desc        = document.getElementById('statusDesc');
-  const iconWrap    = document.getElementById('statusIconWrap');
-  const statTrackers = document.getElementById('statTrackers');
-  const statForms    = document.getElementById('statForms');
-  const statRisk     = document.getElementById('statRisk');
+  const card            = document.getElementById('statusCard');
+  const title           = document.getElementById('statusTitle');
+  const desc            = document.getElementById('statusDesc');
+  const iconWrap        = document.getElementById('statusIconWrap');
+  const insight         = document.getElementById('statusInsight');
+  const statusPill      = document.getElementById('statusPill');
+  const metaLocal       = document.getElementById('statusMetaLocal');
+  const metaPrivacy     = document.getElementById('statusMetaPrivacy');
+  const statTrackers    = document.getElementById('statTrackers');
+  const statForms       = document.getElementById('statForms');
+  const statRisk        = document.getElementById('statRisk');
+  const meta = getStatusMeta(status, trackersBlocked, formsWatched);
 
-  // Remove all state classes
   card.className = 'status-card';
+  card.classList.add(meta.stateClass);
 
-  if (status === 'safe') {
-    card.classList.add('state-safe');
-    title.textContent = 'Verified Secure';
-    desc.textContent  = 'This domain is recognized as legitimate. Your data stays protected on-device.';
-    iconWrap.innerHTML = ICONS.safe;
-    setStats(statTrackers, statForms, statRisk, trackersBlocked, formsWatched, 'LOW', 'low');
-
-  } else if (status === 'unsafe') {
-    card.classList.add('state-unsafe');
-    title.textContent = 'Phishing Risk!';
-    desc.textContent  = 'High similarity to known phishing patterns. Do NOT enter credentials or card info.';
-    iconWrap.innerHTML = ICONS.unsafe;
-    setStats(statTrackers, statForms, statRisk, trackersBlocked, formsWatched, 'HIGH', 'high');
-
-  } else {
-    card.classList.add('state-unknown');
-    title.textContent = 'Unverified Domain';
-    desc.textContent  = 'GhostForm has not verified this site yet. Avoid submitting sensitive information.';
-    iconWrap.innerHTML = ICONS.unknown;
-    setStats(statTrackers, statForms, statRisk, trackersBlocked, formsWatched, 'MED', 'medium');
-  }
+  title.textContent = meta.title;
+  desc.textContent  = meta.desc;
+  insight.textContent = meta.insight;
+  statusPill.textContent = meta.pill;
+  metaLocal.textContent = meta.metaLocal;
+  metaPrivacy.textContent = meta.metaPrivacy;
+  iconWrap.innerHTML = ICONS[meta.icon] || ICONS.unknown;
+  setStats(statTrackers, statForms, statRisk, trackersBlocked, formsWatched, meta.statRisk, meta.riskClass);
 }
 
 function setStats(trackerEl, formsEl, riskEl, trackers, forms, riskText, riskClass) {
