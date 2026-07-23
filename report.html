@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reports — Ghost Form</title>
+  <meta name="description" content="Submit and view phishing threat reports." />
+  <link rel="stylesheet" href="auth.css" />
+  <style>
+    .report-form-card {
+      background: rgba(17,24,39,0.6);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      margin-bottom: 28px;
+    }
+    .filter-chip {
+      padding: 5px 14px; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition);
+    }
+    .filter-chip.active, .filter-chip:hover {
+      background: var(--neon-glow); color: var(--neon); border-color: rgba(0,255,136,0.3);
+    }
+    .report-count-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 999px;
+      background: rgba(0,255,136,0.08); color: var(--neon);
+      border: 1px solid rgba(0,255,136,0.2); font-size: 0.78rem; font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+<div class="bg-mesh" aria-hidden="true"></div>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<!-- ── SIDEBAR ───────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">GF</div>
+    <div><div class="sidebar-title">Ghost Form</div><div class="sidebar-sub">Privacy Dashboard</div></div>
+  </div>
+  <span class="nav-section-label">Main</span>
+  <a href="dashboard.html" class="nav-item">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Dashboard
+  </a>
+  <a href="analysis.html" class="nav-item">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Analysis
+  </a>
+  <a href="report.html" class="nav-item active">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    Reports
+  </a>
+  <span class="nav-section-label" style="margin-top:8px;">Settings</span>
+  <a href="options.html" class="nav-item" target="_blank">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Extension Settings
+  </a>
+  <div class="sidebar-footer">
+    <div class="user-chip" style="margin-bottom:10px;">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div><div class="user-email" id="userEmail">—</div><div class="user-role">Pro User</div></div>
+    </div>
+    <button class="btn btn-ghost btn-full btn-sm" id="logoutBtn">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN ──────────────────────────────────────────────── -->
+<div class="page-with-sidebar">
+  <div class="page-header">
+    <div class="page-header-title">
+      <h1>Phishing Reports</h1>
+      <p>Submit new reports and view all detected threats</p>
+    </div>
+    <button class="btn btn-neon btn-sm" id="toggleFormBtn">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Report
+    </button>
+  </div>
+
+  <div class="page-body">
+
+    <!-- ── SUBMIT FORM ─────────────────────────────────────── -->
+    <div id="reportFormWrap" class="hidden">
+      <div class="report-form-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+          <div style="width:38px;height:38px;border-radius:10px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:1.1rem;">📋</div>
+          <div>
+            <h3 style="font-size:1rem;font-weight:700;">Submit Phishing Report</h3>
+            <p style="font-size:0.78rem;color:var(--text-secondary);">Help protect the community by reporting a suspicious domain</p>
+          </div>
+        </div>
+
+        <div id="reportAlert" class="alert hidden" role="alert" style="margin-bottom:16px;"></div>
+
+        <form id="reportForm" novalidate>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+            <div class="form-group">
+              <label class="form-label" for="reportDomain">Domain *</label>
+              <div class="input-icon-wrap">
+                <svg class="input-icon" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                <input class="form-input" id="reportDomain" type="text" placeholder="e.g. phish-site.xyz" required autocomplete="off" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="reportLevel">Threat Level *</label>
+              <select class="form-input form-select" id="reportLevel" required>
+                <option value="">Select level…</option>
+                <option value="Red">🔴 Red — High Risk</option>
+                <option value="Yellow">🟡 Yellow — Medium Risk</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:16px;">
+            <label class="form-label" for="reportMethod">Detection Method</label>
+            <select class="form-input form-select" id="reportMethod">
+              <option value="ML_Model">ML Model (on-device)</option>
+              <option value="API">API Check</option>
+            </select>
+          </div>
+
+          <div style="background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.1);border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:0.78rem;color:var(--text-muted);display:flex;align-items:flex-start;gap:8px;">
+            <span style="color:var(--neon);flex-shrink:0;">🔒</span>
+            Reports are submitted anonymously. No personal data or browsing history is included.
+          </div>
+
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-neon" type="submit" id="submitReportBtn" style="min-width:140px;">
+              <span id="submitBtnText">Submit Report</span>
+              <span id="submitSpinner" class="spinner hidden" style="width:16px;height:16px;"></span>
+            </button>
+            <button class="btn btn-ghost" type="button" id="cancelFormBtn">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ── STATS MINI ROW ──────────────────────────────────── -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;margin-bottom:24px;">
+      <div class="metric-card" style="padding:16px 18px;">
+        <div class="metric-value" id="statTotal" style="font-size:1.6rem;">—</div>
+        <div class="metric-label">Total Reports</div>
+      </div>
+      <div class="metric-card red" style="padding:16px 18px;">
+        <div class="metric-value" id="statRed" style="font-size:1.6rem;color:#ef4444;">—</div>
+        <div class="metric-label">Red Threats</div>
+      </div>
+      <div class="metric-card orange" style="padding:16px 18px;">
+        <div class="metric-value" id="statYellow" style="font-size:1.6rem;color:#f97316;">—</div>
+        <div class="metric-label">Yellow Threats</div>
+      </div>
+      <div class="metric-card cyan" style="padding:16px 18px;">
+        <div class="metric-value" id="statToday" style="font-size:1.6rem;color:#00d4ff;">—</div>
+        <div class="metric-label">Today</div>
+      </div>
+    </div>
+
+    <!-- ── FILTERS + TABLE ─────────────────────────────────── -->
+    <div class="section-head" style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <h2>All Reports</h2>
+        <span class="report-count-badge" id="reportCountBadge">Loading…</span>
+      </div>
+      <div class="filter-row">
+        <button class="filter-chip active" data-filter="all">All</button>
+        <button class="filter-chip" data-filter="Red">🔴 Red</button>
+        <button class="filter-chip" data-filter="Yellow">🟡 Yellow</button>
+        <button class="filter-chip" data-filter="ML_Model">🧠 ML</button>
+        <button class="filter-chip" data-filter="API">⚡ API</button>
+      </div>
+    </div>
+
+    <div class="data-table-wrap">
+      <div style="overflow-x:auto;">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Domain</th>
+              <th>Threat Level</th>
+              <th>Detection Method</th>
+              <th>Date &amp; Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="reportsBody">
+            <tr><td colspan="6"><div class="empty-state" style="padding:28px;"><div class="spinner"></div><p>Loading reports…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Pagination -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-top:1px solid var(--border);">
+        <span id="pageInfo" style="font-size:0.78rem;color:var(--text-muted);">Page 1</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="prevPageBtn" disabled>← Prev</button>
+          <button class="btn btn-ghost btn-sm" id="nextPageBtn">Next →</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="report.js"></script>
+</body>
+</html>

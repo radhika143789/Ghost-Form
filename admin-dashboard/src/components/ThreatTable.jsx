@@ -81,9 +81,13 @@ function SkeletonRow() {
 // ─────────────────────────────────────────────────────────────
 // ThreatTable — main data table component
 // ─────────────────────────────────────────────────────────────
-export default function ThreatTable({ rows, loading, page, setPage, PAGE_SIZE }) {
+export default function ThreatTable({ rows, loading, page, setPage, PAGE_SIZE, totalCount }) {
   const hasPrev = page > 0
-  const hasNext = rows.length === PAGE_SIZE
+  // Fix #7: derive hasNext from the true DB total, not rows.length.
+  // rows.length === PAGE_SIZE would incorrectly show "Next" on the final
+  // page if it happens to contain exactly PAGE_SIZE rows.
+  const rowsFetched = page * PAGE_SIZE + rows.length
+  const hasNext = totalCount !== null ? rowsFetched < totalCount : rows.length === PAGE_SIZE
 
   return (
     <div className="card-glass rounded-2xl overflow-hidden">

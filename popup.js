@@ -1,5 +1,21 @@
 import { getStatusMeta } from './src/popup_ui_state.js';
 
+/* ── Session helper (mirrors auth.js) ───────────────────── */
+function getPopupSession() {
+  return new Promise(resolve => {
+    // Try chrome.storage first (extension context)
+    chrome.storage.local.get(['gf_session'], result => {
+      const s = result?.gf_session;
+      if (s && Date.now() < s.expires_at) { resolve(s); return; }
+      resolve(null);
+    });
+  });
+}
+
+function openExtensionPage(page) {
+  chrome.tabs.create({ url: chrome.runtime.getURL(page) });
+}
+
 /* ── SVG Icon helpers ─────────────────────────────────── */
 
 const ICONS = {
@@ -25,10 +41,42 @@ const ICONS = {
 
 /* ── Popup Logic ──────────────────────────────────────── */
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const toggleInput  = document.getElementById('protectionToggle');
   const toggleText   = document.getElementById('toggleText');
   const toggleDot    = document.getElementById('toggleDot');
+
+  /* ── Auth-aware UI ────────────────────────────────── */
+  const session = await getPopupSession();
+  const userStrip   = document.getElementById('userStrip');
+  const loginPrompt = document.getElementById('loginPrompt');
+
+  if (session?.user) {
+    // Logged in: show user strip
+    userStrip.style.display = 'flex';
+    const emailEl = document.getElementById('popupUserEmail');
+    if (emailEl) emailEl.textContent = session.user.email;
+
+    document.getElementById('btnDashboard')?.addEventListener('click', () => {
+      openExtensionPage('dashboard.html');
+    });
+    document.getElementById('btnLogout')?.addEventListener('click', () => {
+      chrome.storage.local.remove('gf_session', () => {
+        userStrip.style.display = 'none';
+        if (loginPrompt) loginPrompt.style.display = 'flex';
+      });
+    });
+  } else {
+    // Not logged in: show sign-in prompt
+    if (loginPrompt) loginPrompt.style.display = 'flex';
+
+    document.getElementById('btnOpenAuth')?.addEventListener('click', () => {
+      openExtensionPage('auth.html');
+    });
+    document.getElementById('btnSkipAuth')?.addEventListener('click', () => {
+      if (loginPrompt) loginPrompt.style.display = 'none';
+    });
+  }
 
   // --- Protection toggle ---
   chrome.storage.local.get(['protectionEnabled'], (data) => {
@@ -110,6 +158,10 @@ document.addEventListener('DOMContentLoaded', () => {
         chrome.tabs.create({ url: `https://safebrowsing.google.com/safebrowsing/report_phish/?url=${encodeURIComponent(url)}` });
       }
     });
+  });
+
+  document.getElementById('btnReportsPage')?.addEventListener('click', () => {
+    openExtensionPage('report.html');
   });
 });
 

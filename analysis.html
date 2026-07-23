@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Analysis — Ghost Form</title>
+  <meta name="description" content="Detailed per-domain threat analysis with detection signal breakdown." />
+  <link rel="stylesheet" href="auth.css" />
+  <style>
+    .signal-bar-wrap { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    .signal-label { font-size:0.8rem; color:var(--text-secondary); width:160px; flex-shrink:0; }
+    .signal-track { flex:1; height:8px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden; }
+    .signal-fill  { height:100%; border-radius:4px; transition:width 1s cubic-bezier(0.4,0,0.2,1); }
+    .signal-val   { font-size:0.78rem; font-weight:600; width:36px; text-align:right; }
+
+    .timeline-item {
+      display:flex; gap:16px; align-items:flex-start;
+      padding:12px 0; border-bottom:1px solid rgba(30,45,69,0.4);
+    }
+    .timeline-item:last-child { border-bottom:none; }
+    .timeline-dot {
+      width:10px; height:10px; border-radius:50%; flex-shrink:0; margin-top:4px;
+    }
+    .url-pill {
+      display:inline-block; font-family:'JetBrains Mono',monospace; font-size:0.78rem;
+      background:rgba(0,0,0,0.4); border:1px solid var(--border); border-radius:6px;
+      padding:4px 10px; color:var(--text-secondary); word-break:break-all;
+      max-width:100%;
+    }
+  </style>
+</head>
+<body>
+<div class="bg-mesh" aria-hidden="true"></div>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<!-- ── SIDEBAR ───────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">GF</div>
+    <div>
+      <div class="sidebar-title">Ghost Form</div>
+      <div class="sidebar-sub">Privacy Dashboard</div>
+    </div>
+  </div>
+  <span class="nav-section-label">Main</span>
+  <a href="dashboard.html" class="nav-item">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Dashboard
+  </a>
+  <a href="analysis.html" class="nav-item active">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Analysis
+  </a>
+  <a href="report.html" class="nav-item">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    Reports
+  </a>
+  <span class="nav-section-label" style="margin-top:8px;">Settings</span>
+  <a href="options.html" class="nav-item" target="_blank">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Extension Settings
+  </a>
+  <div class="sidebar-footer">
+    <div class="user-chip" style="margin-bottom:10px;">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div><div class="user-email" id="userEmail">—</div><div class="user-role">Pro User</div></div>
+    </div>
+    <button class="btn btn-ghost btn-full btn-sm" id="logoutBtn">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN ──────────────────────────────────────────────── -->
+<div class="page-with-sidebar">
+  <div class="page-header">
+    <div class="page-header-title">
+      <h1>Detailed Analysis</h1>
+      <p>Deep-dive into domain threat signals and detection history</p>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-outline btn-sm" id="exportBtn">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export JSON
+      </button>
+      <a href="dashboard.html" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+  </div>
+
+  <div class="page-body">
+
+    <!-- Domain search bar -->
+    <div style="display:flex;gap:10px;margin-bottom:24px;" id="searchRow">
+      <div class="input-icon-wrap" style="flex:1;">
+        <svg class="input-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="form-input" id="domainSearch" type="text" placeholder="Search domain e.g. paypal.com" autocomplete="off" />
+      </div>
+      <button class="btn btn-neon" id="searchBtn">Analyse</button>
+    </div>
+
+    <!-- Domain hero card -->
+    <div id="domainHero" class="hidden" style="margin-bottom:24px;"></div>
+
+    <!-- Signals + Timeline row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;" id="analysisGrid" class="hidden">
+
+      <!-- Detection signals -->
+      <div class="chart-wrap">
+        <div class="chart-title">🔬 Detection Signals</div>
+        <div id="signalsWrap"></div>
+      </div>
+
+      <!-- Domain timeline -->
+      <div class="data-table-wrap" style="border:none;background:rgba(17,24,39,0.6);">
+        <div class="data-table-header">
+          <h3>📅 Detection Timeline</h3>
+          <span id="timelineCount" class="badge badge-red" style="font-size:0.7rem;"></span>
+        </div>
+        <div id="timeline" style="padding:8px 16px 12px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+
+    </div>
+
+    <!-- All domains table (default view) -->
+    <div id="allDomainsWrap">
+      <div class="section-head" style="margin-bottom:14px;">
+        <h2>All Flagged Domains</h2>
+        <span class="badge badge-neon" id="totalCount">Loading…</span>
+      </div>
+      <div class="data-table-wrap">
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Domain</th><th>Threat Level</th><th>Method</th><th>First Seen</th><th>Occurrences</th><th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="allDomainsBody">
+              <tr><td colspan="6"><div class="empty-state" style="padding:28px;"><div class="spinner"></div><p>Loading…</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="analysis.js"></script>
+</body>
+</html>

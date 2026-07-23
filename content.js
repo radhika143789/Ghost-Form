@@ -747,4 +747,7 @@ if (typeof ghostFormGhostPrint !== 'undefined') {
         .catch(err => console.warn('[GhostForm] Fine-Print AI post-anomaly failed:', err.message));
     }
   });
+} // end of if (typeof ghostFormGhostPrint !== 'undefined')
+
 } // end initGhostForm()
+

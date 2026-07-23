@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Ghost Form</title>
+  <meta name="description" content="Your Ghost Form privacy dashboard — threat metrics, live feed and safety analysis." />
+  <link rel="stylesheet" href="auth.css" />
+  <style>
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .three-col { display: grid; grid-template-columns: 2fr 1fr; gap: 18px; }
+    @media (max-width: 1100px) { .two-col, .three-col { grid-template-columns: 1fr; } }
+
+    /* Gauge ring */
+    .gauge-ring { position: relative; width: 120px; height: 120px; margin: 0 auto; }
+    .gauge-ring svg { transform: rotate(-90deg); }
+    .gauge-ring .ring-bg  { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 10; }
+    .gauge-ring .ring-val { fill: none; stroke-width: 10; stroke-linecap: round;
+      stroke-dasharray: 326; stroke-dashoffset: 326;
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1); }
+    .gauge-ring .ring-val.neon   { stroke: #00ff88; }
+    .gauge-ring .ring-val.orange { stroke: #f97316; }
+    .gauge-ring .ring-val.red    { stroke: #ef4444; }
+    .gauge-center {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .gauge-num   { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+    .gauge-sub   { font-size: 0.65rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* Sparkline */
+    .spark-canvas { width: 100%; height: 56px; }
+
+    /* Live dot */
+    @keyframes live-blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--neon); display: inline-block;
+      animation: live-blink 1.4s ease infinite;
+    }
+
+    /* Optimize tip */
+    .tip-card {
+      display: flex; align-items: flex-start; gap: 14px;
+      background: rgba(17,24,39,0.5); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px; transition: var(--transition);
+    }
+    .tip-card:hover { border-color: var(--border-bright); }
+    .tip-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--neon-glow); border: 1px solid rgba(0,255,136,0.3);
+      color: var(--neon); font-size: 0.78rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+<div class="bg-mesh" aria-hidden="true"></div>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<!-- ── SIDEBAR ───────────────────────────────────────────── -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-logo">GF</div>
+    <div>
+      <div class="sidebar-title">Ghost Form</div>
+      <div class="sidebar-sub">Privacy Dashboard</div>
+    </div>
+  </div>
+
+  <span class="nav-section-label">Main</span>
+  <a href="dashboard.html" class="nav-item active" id="nav-dashboard">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Dashboard
+  </a>
+  <a href="analysis.html" class="nav-item" id="nav-analysis">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Analysis
+  </a>
+  <a href="report.html" class="nav-item" id="nav-report">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+    Reports
+  </a>
+
+  <span class="nav-section-label" style="margin-top:8px;">Settings</span>
+  <a href="options.html" class="nav-item" target="_blank" id="nav-settings">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Extension Settings
+  </a>
+
+  <div class="sidebar-footer">
+    <div class="user-chip" style="margin-bottom:10px;">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <div>
+        <div class="user-email" id="userEmail">Loading…</div>
+        <div class="user-role">Pro User</div>
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-full btn-sm" id="logoutBtn">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign Out
+    </button>
+  </div>
+</aside>
+
+<!-- ── MAIN ──────────────────────────────────────────────── -->
+<div class="page-with-sidebar">
+
+  <!-- Page header -->
+  <div class="page-header">
+    <div class="page-header-title">
+      <h1>Dashboard</h1>
+      <p id="headerGreeting">Welcome back — here's your security overview</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text-muted);">
+        <span class="live-dot"></span> Live
+      </div>
+      <button class="btn btn-outline btn-sm" id="refreshBtn">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <div class="page-body">
+
+    <!-- ── METRICS MATRIX ─────────────────────────────────── -->
+    <div class="section-head" style="margin-bottom:16px;">
+      <div>
+        <h2>Metrics Matrix</h2>
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:3px;">Real-time threat intelligence from your browsing session</p>
+      </div>
+    </div>
+
+    <div class="metric-grid" style="margin-bottom:28px;" id="metricsGrid">
+      <div class="metric-card">
+        <div class="metric-icon neon">🛡️</div>
+        <div class="metric-value" id="mTotalBlocked">—</div>
+        <div class="metric-label">Total Threats Blocked</div>
+        <div class="metric-sub" id="mBlockedSub">Loading…</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-icon red">🔴</div>
+        <div class="metric-value" id="mHighRisk" style="color:#ef4444;">—</div>
+        <div class="metric-label">High Risk (Red)</div>
+        <div class="metric-sub" id="mHighSub">Loading…</div>
+      </div>
+      <div class="metric-card orange">
+        <div class="metric-icon orange">🟡</div>
+        <div class="metric-value" id="mMedRisk" style="color:#f97316;">—</div>
+        <div class="metric-label">Medium Risk (Yellow)</div>
+        <div class="metric-sub" id="mMedSub">Loading…</div>
+      </div>
+      <div class="metric-card cyan">
+        <div class="metric-icon cyan">🧠</div>
+        <div class="metric-value" id="mMLDetect">—</div>
+        <div class="metric-label">ML Detections</div>
+        <div class="metric-sub">On-device model</div>
+      </div>
+    </div>
+
+    <!-- ── CHARTS ROW ─────────────────────────────────────── -->
+    <div class="two-col" style="margin-bottom:28px;">
+
+      <!-- Threat trend sparkline -->
+      <div class="chart-wrap">
+        <div class="chart-title">📈 Threat Trend — Last 7 Days</div>
+        <canvas id="trendChart" class="spark-canvas" height="140"></canvas>
+      </div>
+
+      <!-- Safety score gauge -->
+      <div class="chart-wrap" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;">
+        <div class="chart-title" style="text-align:center;">🎯 Safety Score</div>
+        <div class="gauge-ring">
+          <svg viewBox="0 0 120 120" width="120" height="120">
+            <circle class="ring-bg"  cx="60" cy="60" r="52"/>
+            <circle class="ring-val" cx="60" cy="60" r="52" id="gaugeRing"/>
+          </svg>
+          <div class="gauge-center">
+            <span class="gauge-num" id="gaugeNum">—</span>
+            <span class="gauge-sub">/ 100</span>
+          </div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text-secondary);text-align:center;" id="gaugeLabel">Calculating…</div>
+      </div>
+
+    </div>
+
+    <!-- ── LIVE THREAT FEED + DETECTION SPLIT ────────────── -->
+    <div class="three-col" style="margin-bottom:28px;">
+
+      <!-- Live feed -->
+      <div class="data-table-wrap">
+        <div class="data-table-header">
+          <h3>🔴 Live Threat Feed</h3>
+          <div style="display:flex;align-items:center;gap:6px;font-size:0.75rem;color:var(--text-muted);">
+            <span class="live-dot" style="width:5px;height:5px;"></span> Realtime
+          </div>
+        </div>
+        <div id="threatFeed" style="padding:0 0 8px;">
+          <div class="empty-state" style="padding:32px;">
+            <div class="spinner"></div>
+            <p>Loading threats…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detection method donut -->
+      <div class="chart-wrap" style="display:flex;flex-direction:column;gap:16px;">
+        <div class="chart-title">⚙️ Detection Split</div>
+        <canvas id="donutChart" width="160" height="160" style="margin:0 auto;display:block;"></canvas>
+        <div id="donutLegend" style="display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- ── OPTIMIZE SECTION ───────────────────────────────── -->
+    <div class="section-head" style="margin-bottom:16px;">
+      <div>
+        <h2>⚡ Optimize Your Protection</h2>
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:3px;">Actionable steps to improve your security score</p>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:28px;" id="optimizeTips">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- ── SAFETY MEASURES ────────────────────────────────── -->
+    <div class="section-head" style="margin-bottom:16px;">
+      <div>
+        <h2>🛡️ Safety Measures</h2>
+        <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:3px;">Active defenses protecting your browsing session</p>
+      </div>
+    </div>
+
+    <div class="safety-grid" style="margin-bottom:28px;">
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(0,255,136,0.12);">🔒</div>
+        <div class="safety-card-body">
+          <h4>Zero Keystroke Logging</h4>
+          <p>All keystrokes are evaluated in local memory only. Nothing is transmitted or stored at any point.</p>
+        </div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(0,212,255,0.12);">🧠</div>
+        <div class="safety-card-body">
+          <h4>On-Device ML Inference</h4>
+          <p>The phishing detection model runs via WebAssembly in your browser. No cloud API calls are made.</p>
+        </div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(124,58,237,0.15);">🔍</div>
+        <div class="safety-card-body">
+          <h4>Shadow DOM Penetration</h4>
+          <p>Monitors inputs hidden inside Shadow DOM trees and nested iframes that bypass standard protection.</p>
+        </div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(249,115,22,0.15);">⚡</div>
+        <div class="safety-card-body">
+          <h4>Real-Time Analysis</h4>
+          <p>Semantic similarity computed at form-focus time — before you type a single character.</p>
+        </div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(239,68,68,0.12);">🚫</div>
+        <div class="safety-card-body">
+          <h4>Tracker Blocking</h4>
+          <p>Third-party tracking scripts and fingerprinting attempts are identified and flagged on each page.</p>
+        </div>
+      </div>
+      <div class="safety-card">
+        <div class="safety-card-icon" style="background:rgba(0,255,136,0.1);">📋</div>
+        <div class="safety-card-body">
+          <h4>Community Threat Reports</h4>
+          <p>Anonymized threat telemetry is aggregated to improve protection for all Ghost Form users.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RECENT DOMAINS TABLE ───────────────────────────── -->
+    <div class="section-head" style="margin-bottom:16px;">
+      <div><h2>🕵️ Recent Flagged Domains</h2></div>
+      <a href="analysis.html" class="btn btn-ghost btn-sm">View Full Analysis →</a>
+    </div>
+
+    <div class="data-table-wrap" style="margin-bottom:32px;">
+      <div style="overflow-x:auto;">
+        <table class="data-table" id="domainsTable">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Threat Level</th>
+              <th>Detection Method</th>
+              <th>Detected At</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="domainsBody">
+            <tr><td colspan="5"><div class="empty-state" style="padding:28px;"><div class="spinner"></div><p>Loading data…</p></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /page-body -->
+</div><!-- /page-with-sidebar -->
+
+<script src="dashboard.js"></script>
+</body>
+</html>

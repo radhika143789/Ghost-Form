@@ -11,6 +11,6 @@
     "**/*.test.js"
   ],
   "moduleNameMapper": {
-    "^@xenova/transformers$": "<rootDir>/__mocks__/@xenova/transformers.js"
+    "^@xenova/transformers$": "<rootDir>/tests/__mocks__/@xenova/transformers.js"
   }
 }

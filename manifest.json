@@ -21,6 +21,12 @@
   "content_scripts": [
     {
       "matches": ["https://*/*", "http://*/*"],
+      "exclude_matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*"
+      ],
       "css": ["content.css"],
       "js": ["dist/content_features.js", "content.js"],
       "run_at": "document_end",
@@ -44,12 +50,26 @@
         "dist/ml_worker.js",
         "dist/*.wasm",
         "dist/*.ort",
-        "models/*"
+        "models/*",
+        "auth.html",
+        "auth.css",
+        "auth.js",
+        "dashboard.html",
+        "dashboard.js",
+        "analysis.html",
+        "analysis.js",
+        "report.html",
+        "report.js",
+        "popup.css",
+        "options.html",
+        "options.css",
+        "options.js"
       ],
-      "matches": ["chrome-extension://__MSG_@@extension_id__/*"]
+      "matches": ["<all_urls>"]
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; worker-src 'self'; connect-src 'self' https://ghost-form-proxy.yourdomain.workers.dev https://huggingface.co https://cdn-lfs.huggingface.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'; default-src 'none'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; worker-src 'self'; connect-src 'self' https://*.supabase.co https://huggingface.co https://cdn-lfs.huggingface.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'; default-src 'none'"
   }
 }
+

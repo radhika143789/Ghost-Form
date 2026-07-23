@@ -11,6 +11,12 @@ admin-dashboard/dist/
 .env.local
 .env.*.local
 
+# Extension Supabase config — contains API keys
+src/config.js
+
+# Cloudflare Worker local dev env
+cloudflare-worker/.env
+
 # Editor noise
 .vscode/
 .idea/

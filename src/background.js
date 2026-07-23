@@ -1,17 +1,20 @@
 /**
- * background.js — Ghost Form Phase 5 (Audit Fix)
+ * background.js — Ghost Form Phase 5 (Audit Fix + Telemetry)
  *
  * This is the main service worker. Its responsibilities are:
  *  1. Creating and managing the Offscreen Document that hosts the ML Worker.
  *  2. Routing ANALYZE requests from content.js to the Offscreen Document.
  *  3. Maintaining a session-level result cache to avoid redundant ML inference.
  *  4. Recovering gracefully after MV3 service worker suspension.
+ *  5. Reporting confirmed phishing detections to Supabase (privacy-first: domain + level only).
  *
  * SECURITY FIX (Critical Audit Finding — MV3 Service Worker Lifecycle):
  *   The ML Web Worker is now hosted inside an Offscreen Document instead of
  *   directly inside this service worker. This prevents Chrome from killing
  *   the WASM runtime mid-inference when it suspends the service worker.
  */
+
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 // ---------------------------------------------------------------------------
 // 1. Offscreen Document Management
@@ -298,7 +301,73 @@ function getGraceCacheEntry(hostname) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Main Domain Status Check — combines whitelist + ML + API fallback
+// 4. Supabase Telemetry Reporter
+// ---------------------------------------------------------------------------
+
+/**
+ * Reports a confirmed threat to the Supabase threat_telemetry table.
+ *
+ * PRIVACY GUARANTEE:
+ *   Only the flagged domain name, threat level, and detection method are sent.
+ *   No user IP, no tab content, no personally identifiable data.
+ *   The Supabase anon key is safe to use here — INSERT is allowed for anon
+ *   users by RLS policy, but SELECT is restricted to authenticated admins only.
+ *
+ * This function is fire-and-forget. It must never block or delay
+ * sendResponse() to the content script — failures are logged and discarded.
+ *
+ * @param {string} domain           - e.g. "fake-paypal-login.com"
+ * @param {'Red'|'Yellow'} level    - Threat severity
+ * @param {'ML_Model'|'API'} method - How the threat was detected
+ */
+async function reportThreatTelemetry(domain, level, method) {
+  // Validate inputs before sending — the DB has CHECK constraints but we
+  // want to catch miscalls early to avoid noisy 400 errors in the console.
+  if (!domain || !['Red', 'Yellow'].includes(level) || !['ML_Model', 'API'].includes(method)) {
+    console.warn('[GhostForm] reportThreatTelemetry: invalid arguments, skipping.', { domain, level, method });
+    return;
+  }
+
+  if (!SUPABASE_URL || SUPABASE_URL.includes('YOUR_PROJECT_ID')) {
+    // Config not yet filled in — skip silently so the extension still works
+    // before the developer sets up their Supabase project.
+    console.warn('[GhostForm] Telemetry skipped: SUPABASE_URL not configured in src/config.js');
+    return;
+  }
+
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/threat_telemetry`, {
+      method: 'POST',
+      headers: {
+        'apikey':        SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type':  'application/json',
+        'Prefer':        'return=minimal', // Don't return row data — saves bandwidth
+      },
+      body: JSON.stringify({
+        domain_flagged:   domain,
+        threat_level:     level,
+        detection_method: method,
+      }),
+    });
+
+    if (!response.ok) {
+      // 409 Conflict is acceptable (duplicate row within same session).
+      // Log everything else as a warning.
+      if (response.status !== 409) {
+        console.warn(`[GhostForm] Telemetry POST failed: HTTP ${response.status}`);
+      }
+    } else {
+      console.log(`[GhostForm] Telemetry reported: ${level} threat on ${domain} via ${method}`);
+    }
+  } catch (err) {
+    // Network error (offline, CSP block, etc.) — non-fatal, discard silently
+    console.warn('[GhostForm] Telemetry POST error (non-fatal):', err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Main Domain Status Check — combines whitelist + ML + API fallback
 // ---------------------------------------------------------------------------
 
 async function checkDomainStatus(urlString) {
@@ -438,6 +507,28 @@ setInterval(() => {
 // 6. Message Router
 // ---------------------------------------------------------------------------
 
+/**
+ * Wraps chrome.runtime.sendResponse to silently absorb the
+ * "message channel closed before a response was received" error.
+ *
+ * This error fires when the MV3 service worker is suspended by Chrome between
+ * the `return true` and the actual `sendResponse()` call. The response is lost,
+ * but there is nothing we can do about MV3 lifecycle suspension. Logging a
+ * noisy uncaught Promise error every time the worker wakes is not helpful.
+ *
+ * @param {Function} sendResponse - The original sendResponse from the listener.
+ * @param {any} data - The payload to send back.
+ */
+function safeRespond(sendResponse, data) {
+  try {
+    sendResponse(data);
+  } catch (_) {
+    // Channel already closed (service worker was suspended) — discard silently
+  }
+  // Also clear any dangling lastError to prevent Chrome from logging it
+  void chrome.runtime.lastError;
+}
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // Ignore messages targeted at the offscreen document (they're not for us)
@@ -445,7 +536,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // --- Check domain trust status (popup or content script) ---
   if (request.action === 'checkStatus') {
-    checkDomainStatus(request.url).then(sendResponse);
+    checkDomainStatus(request.url).then(result => safeRespond(sendResponse, result));
     return true;
   }
 
@@ -459,9 +550,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       console.warn(`[GhostForm] Rate limit exceeded for tab ${tabId}. Request dropped.`);
       const rateLimitGrace = getGraceCacheEntry(hostname);
       if (rateLimitGrace) {
-        sendResponse({ ...rateLimitGrace, source: 'grace_cache_rate_limited' });
+        safeRespond(sendResponse, { ...rateLimitGrace, source: 'grace_cache_rate_limited' });
       } else {
-        sendResponse({
+        safeRespond(sendResponse, {
           status: 'unknown',
           source: 'rate_limited',
           message: 'Too many inference requests. Max 1 per second per tab.',
@@ -484,20 +575,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const result = { status, topMatch, allScores: response.results, source: 'ml' };
         await setSessionCache(`ml_status_${hostname}`, { status, topMatch });
         _updateGraceCache(hostname, status, topMatch);
-        sendResponse(result);
+
+        // ── Telemetry reporting (fire-and-forget, never blocks sendResponse) ──
+        // 'unsafe' maps to Red (HIGH_RISK score >= 0.80)
+        // 'unknown' with a topMatch maps to Yellow (MEDIUM_RISK score 0.65–0.79)
+        // 'safe' is not reported — we only track threats.
+        if (status === 'unsafe') {
+          reportThreatTelemetry(hostname, 'Red', 'ML_Model').catch(() => {});
+        } else if (status === 'unknown' && topMatch?.score >= SIMILARITY_THRESHOLDS.MEDIUM_RISK) {
+          reportThreatTelemetry(hostname, 'Yellow', 'ML_Model').catch(() => {});
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
+        safeRespond(sendResponse, result);
       })
       .catch((err) => {
         releaseInferenceSlot();
         console.error('[GhostForm] ML analysis failed:', err);
 
-        // Grace-period fallback: if we have a recent known-good result,
-        // serve it instead of bubbling 'unknown' to the user.
         const graceFallback = getGraceCacheEntry(hostname);
         if (graceFallback) {
           console.log(`[GhostForm] Serving grace-cache fallback for ${hostname}: ${graceFallback.status}`);
-          sendResponse({ ...graceFallback, source: 'grace_cache' });
+          safeRespond(sendResponse, { ...graceFallback, source: 'grace_cache' });
         } else {
-          sendResponse({ status: 'unknown', source: 'ml_error', error: err.message });
+          safeRespond(sendResponse, { status: 'unknown', source: 'ml_error', error: err.message });
         }
       });
 
@@ -534,8 +635,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }, 30000)
       .then((response) => {
         if (response?.success) {
-          // Map raw similarity scores back to labeled findings
-          // ✅ Use match.index (not array position) so labels survive anchor reordering
           const findings = (response.findings || [])
             .map((match) => {
               const label = DARK_PATTERN_LABELS[match.index];
@@ -543,26 +642,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               return { ...label, score: match.score };
             })
             .filter(f => f !== null && f.score >= 0.6);
-          sendResponse({ findings });
+          safeRespond(sendResponse, { findings });
         } else {
-          sendResponse({ findings: [] });
+          safeRespond(sendResponse, { findings: [] });
         }
       })
-      .catch(() => sendResponse({ findings: [] }));
+      .catch(() => safeRespond(sendResponse, { findings: [] }));
     return true;
   }
 
   // --- Ping the ML worker to pre-warm it ---
   if (request.action === 'PING_ML') {
     sendToOffscreenML('ML_PING', {}, 60000)
-      .then((response) => sendResponse({ ready: response?.ready ?? false }))
-      .catch((err) => sendResponse({ ready: false, error: err.message }));
+      .then((response) => safeRespond(sendResponse, { ready: response?.ready ?? false }))
+      .catch((err)   => safeRespond(sendResponse, { ready: false, error: err.message }));
     return true;
   }
 
   // Fix #19: Unknown action fallback — prevents callers from hanging indefinitely
   console.warn('[GhostForm] Unknown message action:', request.action);
-  sendResponse({ error: `Unknown action: ${request.action}` });
+  safeRespond(sendResponse, { error: `Unknown action: ${request.action}` });
   return false;
 });
 

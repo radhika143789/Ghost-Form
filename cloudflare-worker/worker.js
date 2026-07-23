@@ -5,6 +5,12 @@
  * threat APIs, keeping API keys server-side and preventing their exposure
  * in client-side code.
  *
+ * SUPABASE KEY USAGE IN THIS WORKER:
+ *   env.SUPABASE_URL             → Project URL (all requests)
+ *   env.SUPABASE_PUBLISHABLE_KEY → Anon key  (public read operations)
+ *   env.SUPABASE_SECRET_KEY      → Service-role key (admin/bypass-RLS ops)
+ *   env.SUPABASE_JWKS_URL        → JWT public keys for verifying admin tokens
+ *
  * SECURITY FIX (Medium Audit Finding — Telemetry Spam / Abuse Prevention):
  *   The previous implementation had no rate limiting or origin validation
  *   beyond a single CORS header. An attacker could extract the worker URL
@@ -19,6 +25,7 @@
  *     2. Domain parameter validation (must be a valid hostname, no URLs).
  *     3. Request body size limiting for POST telemetry endpoints.
  *     4. Strict CORS enforcement — only the extension origin is allowed.
+ *     5. Supabase JWT verification for admin-only endpoints.
  */
 
 // ---------------------------------------------------------------------------
@@ -91,11 +98,70 @@ function isValidDomain(domain) {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Main Fetch Handler
+// 3. Supabase JWT Verifier (for admin-only endpoints)
+// ---------------------------------------------------------------------------
+
+/**
+ * Verifies a Supabase-issued JWT using the project's JWKS endpoint.
+ * Used to protect admin routes inside the worker (e.g., bulk exports).
+ *
+ * @param {string} token     - The Bearer token from the Authorization header.
+ * @param {string} jwksUrl   - env.SUPABASE_JWKS_URL
+ * @returns {Promise<object>} - The decoded JWT payload if valid.
+ * @throws {Error}           - If the token is missing, expired, or invalid.
+ */
+async function verifySupabaseJWT(token, jwksUrl) {
+  if (!token) throw new Error('Missing Authorization token');
+
+  // Fetch the public JWKS from Supabase
+  const jwksResponse = await fetch(jwksUrl);
+  if (!jwksResponse.ok) throw new Error('Failed to fetch JWKS');
+  const { keys } = await jwksResponse.json();
+
+  // Decode the JWT header to find the key ID (kid)
+  const [headerB64] = token.split('.');
+  const header = JSON.parse(atob(headerB64));
+
+  // Find the matching public key
+  const jwk = keys.find(k => k.kid === header.kid) ?? keys[0];
+  if (!jwk) throw new Error('No matching JWK found');
+
+  // Import the public key
+  const publicKey = await crypto.subtle.importKey(
+    'jwk', jwk,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false, ['verify']
+  );
+
+  // Verify the JWT signature
+  const [, payloadB64, sigB64] = token.split('.');
+  const sigBytes = Uint8Array.from(atob(sigB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+  const dataBytes = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+
+  const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', publicKey, sigBytes, dataBytes);
+  if (!valid) throw new Error('JWT signature verification failed');
+
+  const payload = JSON.parse(atob(payloadB64));
+  if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+    throw new Error('JWT has expired');
+  }
+
+  return payload;
+}
+
+// ---------------------------------------------------------------------------
+// 4. Main Fetch Handler
 // ---------------------------------------------------------------------------
 
 export default {
   async fetch(request, env, ctx) {
+    // ── Supabase bindings from Cloudflare environment secrets ────────────────
+    const SUPABASE_URL             = env.SUPABASE_URL             || 'https://czoleruusckauzjcmmml.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = env.SUPABASE_PUBLISHABLE_KEY || '';
+    const SUPABASE_SECRET_KEY      = env.SUPABASE_SECRET_KEY      || ''; // service-role — never sent to client
+    const SUPABASE_JWKS_URL        = env.SUPABASE_JWKS_URL        || `${SUPABASE_URL}/auth/v1/.well-known/jwks.json`;
+    // ─────────────────────────────────────────────────────────────────────────
+
     // NOTE: Replace this with your actual Chrome Extension ID from:
     // chrome://extensions → Enable Developer Mode → Copy ID
     const EXTENSION_ORIGIN = env.EXTENSION_ORIGIN || 'chrome-extension://REPLACE_WITH_YOUR_EXTENSION_ID';

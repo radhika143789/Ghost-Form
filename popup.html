@@ -7,6 +7,44 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
+  <style>
+    /* ── Auth-aware additions ─── */
+    .user-strip {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 14px;
+      background: rgba(0,255,136,0.07);
+      border-bottom: 1px solid rgba(0,255,136,0.15);
+      font-size: 0.72rem;
+      gap: 8px;
+    }
+    .user-strip .usr-email { color: #94a3b8; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .user-strip .usr-dot   { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; flex-shrink: 0; }
+    .strip-btn {
+      background: transparent; border: none; cursor: pointer; padding: 0;
+      font-size: 0.7rem; font-weight: 600; font-family: inherit;
+    }
+    .strip-btn.dashboard { color: #00ff88; }
+    .strip-btn.logout    { color: #94a3b8; }
+    .strip-btn:hover     { opacity: 0.75; }
+    /* Login prompt */
+    #loginPrompt {
+      display: flex; flex-direction: column; gap: 8px; align-items: center;
+      padding: 14px 16px 12px;
+      background: rgba(124,58,237,0.07);
+      border-bottom: 1px solid rgba(124,58,237,0.18);
+      text-align: center;
+    }
+    #loginPrompt p   { font-size: 0.75rem; color: #94a3b8; line-height: 1.45; }
+    #loginPrompt .lp-btns { display: flex; gap: 7px; width: 100%; }
+    .lp-btn {
+      flex: 1; padding: 7px 0; border-radius: 6px; font-size: 0.75rem; font-weight: 600;
+      border: none; cursor: pointer; font-family: inherit; transition: all 0.2s;
+    }
+    .lp-btn.primary { background: linear-gradient(135deg,#00ff88,#00ccaa); color: #080c14; }
+    .lp-btn.primary:hover { box-shadow: 0 0 14px rgba(0,255,136,0.4); }
+    .lp-btn.secondary { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+    .lp-btn.secondary:hover { background: rgba(255,255,255,0.1); }
+  </style>
 </head>
 <body>
 
@@ -37,6 +75,23 @@
       </button>
     </div>
   </header>
+
+  <!-- ── AUTH STRIP (logged-in user) ─────────────────────── -->
+  <div class="user-strip" id="userStrip" style="display:none;">
+    <span class="usr-dot"></span>
+    <span class="usr-email" id="popupUserEmail">user@example.com</span>
+    <button class="strip-btn dashboard" id="btnDashboard" title="Open Dashboard">Dashboard ↗</button>
+    <button class="strip-btn logout" id="btnLogout" title="Sign out">Sign out</button>
+  </div>
+
+  <!-- ── LOGIN PROMPT (logged-out user) ──────────────────── -->
+  <div id="loginPrompt" style="display:none;">
+    <p>🛡️ <strong style="color:#f1f5f9;">Sign in</strong> to access your dashboard, threat history, and full analytics.</p>
+    <div class="lp-btns">
+      <button class="lp-btn primary" id="btnOpenAuth">Sign In / Sign Up</button>
+      <button class="lp-btn secondary" id="btnSkipAuth">Continue as Guest</button>
+    </div>
+  </div>
 
   <!-- ── PROTECTION TOGGLE ──────────────────────────────── -->
   <div class="toggle-row">
@@ -143,9 +198,9 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
       </svg>
-      Report Site
+      Report
     </button>
-    <button class="footer-btn" id="btnHistory" title="View history">
+    <button class="footer-btn" id="btnReportsPage" title="View all reports">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 1 .5 4m-.5 5v-5h5"/>
       </svg>

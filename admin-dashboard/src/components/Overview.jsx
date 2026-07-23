@@ -35,11 +35,13 @@ function StatsCard({ icon: Icon, label, value, color, loading }) {
 // Overview — main content panel
 // ─────────────────────────────────────────────────────────────
 export default function Overview() {
-  const [rows,       setRows]       = useState([])
-  const [totalCount, setTotalCount] = useState(null)  // Fix #12: true total from DB count query
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState(null)
-  const [page,       setPage]       = useState(0)
+  const [rows,        setRows]        = useState([])
+  const [totalCount,  setTotalCount]  = useState(null)
+  const [redCount,    setRedCount]    = useState(null)   // Fix #4: full-DB Red count
+  const [yellowCount, setYellowCount] = useState(null)   // Fix #4: full-DB Yellow count
+  const [loading,     setLoading]     = useState(true)
+  const [error,       setError]       = useState(null)
+  const [page,        setPage]        = useState(0)
   const PAGE_SIZE = 20
 
   // useCallback gives fetchData a stable reference so it can safely be
@@ -55,8 +57,8 @@ export default function Overview() {
       // Abort guard: component may have unmounted before we even started
       if (signal?.aborted) return
 
-      // Fetch page rows + true total count in one round-trip
-      const [pageResult, countResult] = await Promise.all([
+      // Fetch page rows + all three aggregate counts in one round-trip
+      const [pageResult, totalResult, redResult, yellowResult] = await Promise.all([
         supabase
           .from('threat_telemetry')
           .select('id, created_at, domain_flagged, threat_level, detection_method')
@@ -65,6 +67,14 @@ export default function Overview() {
         supabase
           .from('threat_telemetry')
           .select('*', { count: 'exact', head: true }),
+        supabase
+          .from('threat_telemetry')
+          .select('*', { count: 'exact', head: true })
+          .eq('threat_level', 'Red'),
+        supabase
+          .from('threat_telemetry')
+          .select('*', { count: 'exact', head: true })
+          .eq('threat_level', 'Yellow'),
       ])
 
       // Abort guard: component may have unmounted while awaiting network
@@ -74,7 +84,9 @@ export default function Overview() {
         setError(pageResult.error.message)
       } else {
         setRows(pageResult.data ?? [])
-        setTotalCount(countResult.count ?? 0)
+        setTotalCount(totalResult.count  ?? 0)
+        setRedCount(redResult.count      ?? 0)
+        setYellowCount(yellowResult.count ?? 0)
       }
     } finally {
       // Medium #12: Always clear the loading spinner, even on the abort path.
@@ -98,8 +110,13 @@ export default function Overview() {
           // Prepend the new row only on the first page
           if (page === 0) {
             setRows(prev => [payload.new, ...prev].slice(0, PAGE_SIZE))
-            // Also bump the total count on new inserts
+            // Bump the appropriate counters on new inserts
             setTotalCount(prev => (prev ?? 0) + 1)
+            if (payload.new.threat_level === 'Red') {
+              setRedCount(prev => (prev ?? 0) + 1)
+            } else if (payload.new.threat_level === 'Yellow') {
+              setYellowCount(prev => (prev ?? 0) + 1)
+            }
           }
         }
       )
@@ -111,9 +128,8 @@ export default function Overview() {
     }
   }, [page])
 
-  // Derived stats from the loaded page rows (Red/Yellow from current page)
-  const red    = rows.filter(r => r.threat_level === 'Red').length
-  const yellow = rows.filter(r => r.threat_level === 'Yellow').length
+  // Stats come from full-DB count queries, not from the current page slice
+  // (Fix #4: previous implementation counted only the 20-row page subset)
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
@@ -154,14 +170,14 @@ export default function Overview() {
         <StatsCard
           icon={ShieldX}
           label="Red Threats (High Risk)"
-          value={red}
+          value={redCount}
           color="red"
           loading={loading}
         />
         <StatsCard
           icon={ShieldAlert}
           label="Yellow Threats (Suspicious)"
-          value={yellow}
+          value={yellowCount}
           color="yellow"
           loading={loading}
         />
@@ -176,7 +192,7 @@ export default function Overview() {
       )}
 
       {/* Data Table */}
-      <ThreatTable rows={rows} loading={loading} page={page} setPage={setPage} PAGE_SIZE={PAGE_SIZE} />
+      <ThreatTable rows={rows} loading={loading} page={page} setPage={setPage} PAGE_SIZE={PAGE_SIZE} totalCount={totalCount} />
     </div>
   )
 }
