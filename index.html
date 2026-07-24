@@ -141,9 +141,9 @@
           <a href="#features" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">Features</a>
           <a href="#how-it-works" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">How it Works</a>
           <a href="#privacy" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">Privacy</a>
-          <a href="#install"
-             class="btn-primary px-5 py-2 rounded-lg text-sm font-bold text-ghost-black">
-            Add to Chrome →
+          <a href="report.html" class="text-sm text-slate-400 hover:text-neon-green transition-colors duration-200">Reports</a>
+          <a href="#" class="download-trigger btn-primary px-5 py-2 rounded-lg text-sm font-bold text-ghost-black">
+            Download Extension →
           </a>
         </div>
 
@@ -162,7 +162,8 @@
       <a href="#features"    class="block text-slate-300 hover:text-neon-green py-2">Features</a>
       <a href="#how-it-works" class="block text-slate-300 hover:text-neon-green py-2">How it Works</a>
       <a href="#privacy"     class="block text-slate-300 hover:text-neon-green py-2">Privacy</a>
-      <a href="#install"     class="btn-primary block text-center px-5 py-3 rounded-lg font-bold text-ghost-black">Add to Chrome</a>
+      <a href="report.html"  class="block text-slate-300 hover:text-neon-green py-2">Reports</a>
+      <a href="#"            class="download-trigger btn-primary block text-center px-5 py-3 rounded-lg font-bold text-ghost-black">Download Extension</a>
     </div>
   </nav>
 
@@ -199,9 +200,8 @@
 
       <!-- CTAs -->
       <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-        <a id="install" href="#"
-           class="btn-primary w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-ghost-black text-lg">
-          🛡️ Install for Free
+        <a href="#" class="download-trigger btn-primary w-full sm:w-auto px-8 py-4 rounded-xl font-bold text-ghost-black text-lg">
+          🛡️ Download Extension
         </a>
         <a href="#how-it-works"
            class="w-full sm:w-auto px-8 py-4 rounded-xl font-semibold text-slate-300 border border-ghost-border hover:border-neon-green hover:text-neon-green transition-all duration-200">
@@ -415,10 +415,9 @@
       <h2 class="text-4xl sm:text-5xl font-black text-white mb-6">
         Ready to Browse<br/><span class="gradient-text">Without Fear?</span>
       </h2>
-      <p class="text-slate-400 text-lg mb-10">Free. Open source. No account required.</p>
-      <a href="#"
-         class="btn-primary inline-block px-10 py-4 rounded-xl font-bold text-ghost-black text-lg">
-        🛡️ Install Ghost Form for Free
+      <p class="text-slate-400 text-lg mb-10">Free. Privacy-first. No account required.</p>
+      <a href="#" class="download-trigger btn-primary inline-block px-10 py-4 rounded-xl font-bold text-ghost-black text-lg">
+        🛡️ Download Ghost Form
       </a>
       <p class="text-slate-600 text-sm mt-5">Works on Chrome, Brave, and Edge · Manifest V3</p>
     </div>
@@ -445,9 +444,8 @@
           <a href="#features"    class="hover:text-neon-green transition-colors">Features</a>
           <a href="#privacy"     class="hover:text-neon-green transition-colors">Privacy</a>
           <a href="PRIVACY_POLICY.md" class="hover:text-neon-green transition-colors">Privacy Policy</a>
+          <a href="report.html"  class="hover:text-neon-green transition-colors">Reports</a>
           <a href="mailto:contact@ghostform.dev" class="hover:text-neon-green transition-colors">Contact</a>
-          <a href="https://github.com/radhika143789/Ghost-Form" target="_blank" rel="noopener"
-             class="hover:text-neon-green transition-colors">GitHub ↗</a>
         </div>
 
         <!-- Copyright -->
@@ -457,6 +455,62 @@
       </div>
     </div>
   </footer>
+
+  <!-- ============================================================
+       INSTALLATION INSTRUCTIONS MODAL
+  ============================================================ -->
+  <div id="installModal" class="fixed inset-0 z-[100] flex items-center justify-center hidden p-4">
+    <!-- Backdrop -->
+    <div id="modalBackdrop" class="absolute inset-0 bg-black/75 backdrop-blur-md"></div>
+    
+    <!-- Content Card -->
+    <div class="relative w-full max-w-lg bg-ghost-card border border-ghost-border rounded-2xl p-6 sm:p-8 shadow-2xl z-10 animate-fade-in">
+      <!-- Close Button -->
+      <button id="closeModal" class="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+
+      <!-- Icon & Title -->
+      <div class="flex items-center gap-4 mb-6">
+        <div class="w-12 h-12 rounded-xl bg-neon-glow border border-neon-green border-opacity-30 flex items-center justify-center text-2xl">
+          📦
+        </div>
+        <div>
+          <h3 class="text-xl font-bold text-white">How to Install Ghost Form</h3>
+          <p class="text-xs text-neon-green font-mono">EXTENSION DOWNLOADED SUCCESSFULLY</p>
+        </div>
+      </div>
+
+      <!-- Instructions List -->
+      <div class="space-y-4 text-sm text-slate-300">
+        <div class="flex gap-3">
+          <div class="w-6 h-6 rounded-full bg-ghost-slate border border-ghost-border flex items-center justify-center text-xs font-bold text-neon-green shrink-0">1</div>
+          <p>Extract the downloaded <strong class="text-white font-semibold">ghost-form-extension.zip</strong> archive on your computer.</p>
+        </div>
+        <div class="flex gap-3">
+          <div class="w-6 h-6 rounded-full bg-ghost-slate border border-ghost-border flex items-center justify-center text-xs font-bold text-neon-green shrink-0">2</div>
+          <p>Open Google Chrome and navigate to <code class="bg-ghost-black text-neon-green px-1.5 py-0.5 rounded font-mono text-xs select-all">chrome://extensions/</code> in your address bar.</p>
+        </div>
+        <div class="flex gap-3">
+          <div class="w-6 h-6 rounded-full bg-ghost-slate border border-ghost-border flex items-center justify-center text-xs font-bold text-neon-green shrink-0">3</div>
+          <p>Enable <strong class="text-white font-semibold">Developer Mode</strong> by toggling the switch in the top-right corner.</p>
+        </div>
+        <div class="flex gap-3">
+          <div class="w-6 h-6 rounded-full bg-ghost-slate border border-ghost-border flex items-center justify-center text-xs font-bold text-neon-green shrink-0">4</div>
+          <p>Click the <strong class="text-white font-semibold">Load unpacked</strong> button in the top-left and select the extracted folder.</p>
+        </div>
+      </div>
+
+      <!-- Footer action -->
+      <div class="mt-8 flex justify-end">
+        <button id="btnGotIt" class="btn-primary px-6 py-2.5 rounded-lg text-sm font-bold text-ghost-black">
+          Got It, Thanks!
+        </button>
+      </div>
+    </div>
+  </div>
 
   <script>
     // Mobile menu toggle
@@ -483,6 +537,43 @@
         }
       });
     });
+
+    // Download Modal Logic
+    const installModal = document.getElementById('installModal');
+    const closeModal = document.getElementById('closeModal');
+    const btnGotIt = document.getElementById('btnGotIt');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+
+    const openModal = () => {
+      // Trigger the download of the zip file
+      const link = document.createElement('a');
+      link.href = 'ghost-form-extension.zip';
+      link.download = 'ghost-form-extension.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Show instructions modal
+      installModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden'; // Disable page scrolling
+    };
+
+    const hideModal = () => {
+      installModal.classList.add('hidden');
+      document.body.style.overflow = ''; // Restore scrolling
+    };
+
+    // Attach click events to all download triggers
+    document.querySelectorAll('.download-trigger').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        openModal();
+      });
+    });
+
+    closeModal.addEventListener('click', hideModal);
+    btnGotIt.addEventListener('click', hideModal);
+    modalBackdrop.addEventListener('click', hideModal);
   </script>
 </body>
 </html>

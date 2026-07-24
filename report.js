@@ -19,6 +19,44 @@ function getSession() {
 const session = getSession();
 if (!session) window.location.href = 'auth.html';
 
+/* ── Local threats storage helpers ────────────────────────── */
+async function getLocalThreats() {
+  return new Promise(resolve => {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get({ localThreats: [] }, (data) => {
+        resolve(data.localThreats || []);
+      });
+    } else {
+      resolve([]);
+    }
+  });
+}
+
+async function saveLocalThreat(domain, level, method) {
+  const localRows = await getLocalThreats();
+  // Check if duplicate in the last 5 minutes to avoid spamming
+  const exists = localRows.some(t => t.domain_flagged === domain && t.threat_level === level && (Date.now() - new Date(t.created_at).getTime() < 300000));
+  if (exists) return;
+
+  const newThreat = {
+    id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    domain_flagged: domain,
+    threat_level: level,
+    detection_method: method,
+    created_at: new Date().toISOString()
+  };
+  
+  localRows.unshift(newThreat);
+  if (localRows.length > 100) localRows.pop();
+  return new Promise(resolve => {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ localThreats: localRows }, () => resolve());
+    } else {
+      resolve();
+    }
+  });
+}
+
 /* ── Helpers ──────────────────────────────────────────────── */
 function $(id) { return document.getElementById(id); }
 function setText(id, v) { const el = $(id); if (el) el.textContent = v; }
@@ -143,12 +181,28 @@ function renderTable() {
 
 /* ── Load data ────────────────────────────────────────────── */
 async function loadReports() {
+  let dbRows = [];
   try {
-    allRows = await sbFetch('threat_telemetry', '?select=*&order=created_at.desc');
-    if (!allRows.length) allRows = getDemoRows();
-  } catch {
-    allRows = getDemoRows();
+    dbRows = await sbFetch('threat_telemetry', '?select=*&order=created_at.desc');
+  } catch (err) {
+    console.warn('Failed to fetch from Supabase, falling back to local/demo data:', err);
   }
+
+  const localRows = await getLocalThreats();
+
+  // Merge lists, using domain and timestamp to avoid duplicates.
+  const merged = [...localRows];
+  dbRows.forEach(dbRow => {
+    const exists = merged.some(r => r.domain_flagged === dbRow.domain_flagged && Math.abs(new Date(r.created_at).getTime() - new Date(dbRow.created_at).getTime()) < 60000);
+    if (!exists) {
+      merged.push(dbRow);
+    }
+  });
+
+  // Sort by created_at desc
+  merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  allRows = merged.length ? merged : getDemoRows();
   renderStats(allRows);
   applyFilter('all');
 }
@@ -193,17 +247,16 @@ $('reportForm')?.addEventListener('submit', async e => {
       threat_level:     level,
       detection_method: method,
     });
+    await saveLocalThreat(domain, level, method);
     showAlert('✅ Report submitted successfully! Thank you for keeping the community safe.', 'success');
     $('reportForm').reset();
     await loadReports(); // refresh list
   } catch (err) {
     // Use a demo success if DB constraint fails (e.g. demo env)
-    showAlert('✅ Report logged locally (demo mode active).', 'success');
-    const newRow = { id: Date.now().toString(), domain_flagged: domain, threat_level: level, detection_method: method, created_at: new Date().toISOString() };
-    allRows = [newRow, ...allRows];
+    await saveLocalThreat(domain, level, method);
+    showAlert('✅ Report logged locally.', 'success');
     $('reportForm').reset();
-    renderStats(allRows);
-    applyFilter(activeFilter);
+    await loadReports();
   } finally {
     $('submitReportBtn').disabled = false;
     $('submitBtnText').textContent = 'Submit Report';
@@ -253,4 +306,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (av) av.textContent = (session.user.name || session.user.email || '?')[0].toUpperCase();
   }
   loadReports();
+
+  // Check if a domain parameter is passed to auto-open and prepopulate form
+  const params = new URLSearchParams(window.location.search);
+  const prepopulateDomain = params.get('domain');
+  if (prepopulateDomain) {
+    const domainInput = $('reportDomain');
+    if (domainInput) domainInput.value = prepopulateDomain;
+    const wrap = $('reportFormWrap');
+    if (wrap) wrap.classList.remove('hidden');
+  }
 });

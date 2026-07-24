@@ -366,6 +366,35 @@ async function reportThreatTelemetry(domain, level, method) {
   }
 }
 
+/**
+ * Logs a detected threat locally in chrome.storage.local.
+ *
+ * @param {string} domain
+ * @param {'Red'|'Yellow'} level
+ * @param {'ML_Model'|'API'} method
+ */
+function logThreatLocally(domain, level, method) {
+  chrome.storage.local.get({ localThreats: [] }, (data) => {
+    const list = data.localThreats || [];
+    // Check if duplicate in the last 5 minutes to avoid spamming
+    const exists = list.some(t => t.domain_flagged === domain && t.threat_level === level && (Date.now() - new Date(t.created_at).getTime() < 300000));
+    if (exists) return;
+
+    const newThreat = {
+      id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      domain_flagged: domain,
+      threat_level: level,
+      detection_method: method,
+      created_at: new Date().toISOString()
+    };
+    
+    list.unshift(newThreat); // add to beginning
+    if (list.length > 100) list.pop(); // keep last 100
+    chrome.storage.local.set({ localThreats: list }).catch(() => {});
+  });
+}
+
+
 // ---------------------------------------------------------------------------
 // 5. Main Domain Status Check — combines whitelist + ML + API fallback
 // ---------------------------------------------------------------------------
@@ -582,8 +611,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // 'safe' is not reported — we only track threats.
         if (status === 'unsafe') {
           reportThreatTelemetry(hostname, 'Red', 'ML_Model').catch(() => {});
+          logThreatLocally(hostname, 'Red', 'ML_Model');
         } else if (status === 'unknown' && topMatch?.score >= SIMILARITY_THRESHOLDS.MEDIUM_RISK) {
           reportThreatTelemetry(hostname, 'Yellow', 'ML_Model').catch(() => {});
+          logThreatLocally(hostname, 'Yellow', 'ML_Model');
         }
         // ─────────────────────────────────────────────────────────────────────
 

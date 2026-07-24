@@ -153,9 +153,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('btnReport')?.addEventListener('click', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      const url = tabs[0]?.url;
-      if (url) {
-        chrome.tabs.create({ url: `https://safebrowsing.google.com/safebrowsing/report_phish/?url=${encodeURIComponent(url)}` });
+      const urlString = tabs[0]?.url;
+      if (urlString) {
+        try {
+          const domain = new URL(urlString).hostname;
+          openExtensionPage(`report.html?domain=${encodeURIComponent(domain)}`);
+        } catch {
+          openExtensionPage('report.html');
+        }
+      } else {
+        openExtensionPage('report.html');
       }
     });
   });
