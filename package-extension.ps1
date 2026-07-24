@@ -53,6 +53,11 @@ if (Test-Path "dist") {
     Copy-Item -Path "dist/*" -Destination "$TempDir/dist/" -Recurse -Force
 }
 
+# Icons files
+if (Test-Path "icons") {
+    Copy-Item -Path "icons" -Destination "$TempDir/icons/" -Recurse -Force
+}
+
 # Src runtime dependencies
 if (Test-Path "src/popup_ui_state.js") {
     Copy-Item -Path "src/popup_ui_state.js" -Destination "$TempDir/src/popup_ui_state.js" -Force

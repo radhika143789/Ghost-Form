@@ -3,6 +3,11 @@
   "name": "Ghost Form",
   "version": "3.0.0",
   "description": "Privacy-first anti-phishing extension with on-device machine learning for zero-day detection.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "activeTab",
     "tabs",
@@ -35,7 +40,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Ghost Form"
+    "default_title": "Ghost Form",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "options_ui": {
     "page": "options.html",
@@ -63,7 +73,8 @@
         "popup.css",
         "options.html",
         "options.css",
-        "options.js"
+        "options.js",
+        "icons/*"
       ],
       "matches": ["<all_urls>"]
     }
