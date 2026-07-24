@@ -4,7 +4,7 @@
     "^.+\\.js$": "babel-jest"
   },
   "setupFiles": [
-    "jest-chrome/setup"
+    "<rootDir>/tests/setup-jest-chrome.js"
   ],
   "testMatch": [
     "**/__tests__/**/*.test.js",

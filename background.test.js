@@ -1,4 +1,4 @@
-const { checkDomainWithAPI } = require('./background.js');
+const { checkDomainWithAPI } = require('./background.LEGACY.js');
 const { chrome } = require('jest-chrome');
 
 // Mock the global fetch function
