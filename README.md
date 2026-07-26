@@ -1,66 +1,245 @@
-# Ghost Form
+<div align="center">
 
-Ghost Form is a privacy-first Chrome Extension that uses **on-device machine learning** to detect zero-day phishing sites and prevent users from accidentally typing passwords or credit card numbers into fake forms.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=12,20,24&height=200&section=header&text=Ghost%20Form&fontSize=70&fontAlignY=35&desc=Privacy-First%20Anti-Phishing%20Chrome%20Extension&descAlignY=58&animation=fadeIn&fontColor=ffffff" width="100%"/>
 
-## Core Architecture
+<p>
+  <img alt="Version" src="https://img.shields.io/badge/version-3.0.0-6C63FF?style=for-the-badge&logo=semver&logoColor=white"/>
+  <img alt="Manifest V3" src="https://img.shields.io/badge/Manifest-V3-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white"/>
+  <img alt="On-Device ML" src="https://img.shields.io/badge/ML-On--Device-00C896?style=for-the-badge&logo=pytorch&logoColor=white"/>
+  <img alt="Zero Knowledge" src="https://img.shields.io/badge/Architecture-Zero--Knowledge-FF6B6B?style=for-the-badge&logo=shield&logoColor=white"/>
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-F7DF1E?style=for-the-badge"/>
+</p>
 
-- **Zero-Knowledge**: Keystrokes are evaluated locally via regex and ML. Nothing is ever transmitted.
-- **On-Device ML**: `Xenova/all-MiniLM-L6-v2` (quantized, ~23MB) runs via ONNX Runtime WebAssembly inside a dedicated Web Worker.
-- **Shadow DOM Aware**: `MutationObserver` detects dynamically injected forms and inputs inside Shadow DOM roots.
-- **Serverless Proxy**: A Cloudflare Worker securely forwards domain checks to a Threat API without exposing API keys.
+<br/>
 
-## Project Structure
+> **Ghost Form** is a privacy-first Chrome Extension that uses **on-device machine learning** to detect zero-day phishing sites  
+> and silently guard users from accidentally submitting sensitive data into malicious forms — all without ever leaving your device.
+
+<br/>
+
+</div>
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+|---|---|
+| 🧠 **On-Device ML** | `Xenova/all-MiniLM-L6-v2` (INT8, ~23MB) runs via ONNX Runtime WebAssembly in a dedicated Web Worker |
+| 🔒 **Zero-Knowledge Architecture** | Keystrokes are evaluated locally via regex and ML. **Nothing is ever transmitted.** |
+| 👻 **Shadow DOM Aware** | `MutationObserver` detects dynamically injected forms and inputs inside Shadow DOM roots |
+| ☁️ **Serverless Proxy** | Cloudflare Worker securely forwards domain checks to a Threat API without exposing API keys |
+| ⚡ **Circuit Breaker** | Per-tab token-bucket rate limiter (max 1 inference/sec/tab) with automatic stale-entry pruning |
+| 🛡️ **Smart 3-State Trust UI** | Green / Yellow / Red trust system — silent on unknown domains until high-risk patterns trigger |
+
+---
+
+## 🏗️ Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Chrome Extension                            │
+│                                                                     │
+│  ┌──────────────┐    ┌──────────────────┐    ┌───────────────────┐  │
+│  │  content.js  │───▶│  background.js   │───▶│   ml_worker.js    │  │
+│  │              │    │  (Service Worker) │    │  (Web Worker)     │  │
+│  │ • DOM watch  │    │                  │    │                   │  │
+│  │ • Shadow DOM │    │ • ML orchestrator│    │ • ONNX inference  │  │
+│  │ • Regex scan │    │ • Circuit breaker│    │ • Cosine similarity│ │
+│  │ • UI overlay │    │ • Tab state mgmt │    │ • Brand anchors   │  │
+│  └──────────────┘    └──────────────────┘    └───────────────────┘  │
+│                               │                                     │
+└───────────────────────────────┼─────────────────────────────────────┘
+                                │ domain only (hostname)
+                                ▼
+                   ┌─────────────────────────┐
+                   │   Cloudflare Worker     │
+                   │   (Stateless Proxy)     │
+                   │  • Hides API keys       │
+                   │  • CORS handler         │
+                   │  • Graceful fallback    │
+                   └───────────┬─────────────┘
+                               │
+                               ▼
+                   ┌─────────────────────────┐
+                   │   Threat Intelligence   │
+                   │          API            │
+                   └─────────────────────────┘
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 Ghost-Form/
 ├── src/
-│   ├── background.js      # Phase 3 service worker (ML orchestrator + circuit breaker)
-│   └── ml_worker.js       # On-device ML inference Web Worker (Transformers.js)
+│   ├── background.js          # Phase 3 service worker — ML orchestrator + circuit breaker
+│   ├── ml_worker.js           # On-device ML inference Web Worker (Transformers.js)
+│   ├── config.js              # Centralized extension configuration constants
+│   ├── content_features.js    # Modular content script feature loader
+│   ├── offscreen.js           # Offscreen document helper
+│   ├── popup_ui_state.js      # Popup UI state machine logic
+│   └── features/              # Modular feature modules
+│
 ├── cloudflare-worker/
-│   └── worker.js          # Serverless API key proxy
-├── dist/                  # Generated by `npm run build` — DO NOT edit manually
-├── manifest.json          # Manifest V3 extension config
-├── background.js          # Legacy Phase 1-2 service worker (kept for reference)
-├── content.js             # Form interception, DOM sanitizer, injected warnings
-├── content.css            # Injected CSS for neon warning borders
-├── popup.html/css/js      # Extension popup (3-state trust UI)
-├── options.html/css/js    # User whitelist settings page
-├── index.html             # Public marketing landing page
-├── PRIVACY_POLICY.md      # Required for Chrome Web Store submission
-├── vite.config.js         # Vite bundler config
-└── package.json           # Node dependencies
+│   └── worker.js              # Serverless API key proxy
+│
+├── dist/                      # ⚠️  Generated by `npm run build` — DO NOT edit
+│
+├── tests/                     # Playwright E2E tests
+├── manifest.json              # Manifest V3 extension declaration
+├── background.LEGACY.js       # Phase 1-2 service worker (reference only)
+├── content.js                 # Form interception, DOM sanitizer, injected warnings
+├── content.css                # Injected CSS — neon warning borders & overlays
+├── popup.html/css/js          # Extension popup (3-state trust UI)
+├── options.html/css/js        # User whitelist settings page
+├── auth.html/css/js           # Authentication flow
+├── dashboard.html/js          # User dashboard
+├── analysis.html/js           # Analysis report view
+├── report.html/js             # Detailed threat report
+├── index.html                 # Public marketing landing page
+├── vite.config.js             # Vite bundler config (ESM output)
+├── package.json               # Node dependencies
+├── jest.config.json           # Jest unit test configuration
+├── playwright.config.js       # E2E test configuration
+├── PRIVACY_POLICY.md          # Required for Chrome Web Store
+└── PHASE_STATUS.md            # Development phase tracker
 ```
 
-## Installation (Developer Mode)
+---
 
-1. Run `npm install` to install dependencies.
-2. Run `npm run build` to generate the `dist/` folder.
-3. Open Chrome → `chrome://extensions/` → Enable **Developer mode**.
-4. Click **Load unpacked** → select this project folder.
-5. Click the Ghost Form icon in your toolbar to see the trust status.
+## 🚀 Getting Started
 
-## Deploying the Cloudflare Worker Proxy
+### Prerequisites
 
-1. Log in to your Cloudflare dashboard and create a new Worker.
-2. Paste the code from `cloudflare-worker/worker.js`.
-3. Add your `THREAT_API_KEY` as an **Environment Variable Secret**.
-4. Update the proxy URL in:
-   - `manifest.json` → `content_security_policy.connect-src`
-   - `src/background.js` → `THREAT_API_ENDPOINT`
+- **Node.js** ≥ 18.0
+- **npm** ≥ 9.0
+- **Google Chrome** (or any Chromium-based browser)
 
-## Running Tests
+### Installation (Developer Mode)
 
 ```bash
-npm test
+# 1. Clone the repository
+git clone https://github.com/radhika143789/Ghost-Form.git
+cd Ghost-Form
+
+# 2. Install dependencies
+npm install
+
+# 3. Build the extension bundle
+npm run build
+
+# 4. Load in Chrome:
+#    Open chrome://extensions/ → Enable Developer Mode → Load Unpacked → select this folder
 ```
 
-Tests use [Jest](https://jestjs.io/) + [jest-chrome](https://github.com/nickmccurdy/jest-chrome) to mock the Chrome extension API.
+> 💡 Use `npm run dev` for live-rebuild during development (watch mode).
 
-## Privacy
+---
 
-Ghost Form operates with **zero-knowledge architecture**:
-- No keystrokes are logged or transmitted.
-- Only the domain name (hostname) is checked against the threat proxy.
-- All ML inference runs locally inside your browser.
+## ☁️ Deploying the Cloudflare Worker Proxy
 
-See [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for the full legal statement.
+```bash
+# 1. Log in to your Cloudflare dashboard
+# 2. Create a new Worker → paste cloudflare-worker/worker.js
+# 3. Add secret environment variable:  THREAT_API_KEY = <your-key>
+# 4. Update your Worker URL in two places:
+#       manifest.json     →  content_security_policy.connect-src
+#       src/background.js →  THREAT_API_ENDPOINT constant
+```
+
+---
+
+## 🧪 Testing
+
+```bash
+# Unit tests (Jest + jest-chrome for Chrome API mocking)
+npm test
+
+# End-to-end tests (Playwright)
+npm run test:e2e
+```
+
+**Test coverage includes:**
+- ✅ Domain cache hit/miss logic
+- ✅ ML worker timeout and crash-recovery behavior
+- ✅ Circuit breaker rate limiting
+- ✅ Regex pattern detection (password / credit card formats)
+- ✅ Graceful API fallback on upstream failure
+
+---
+
+## 🔐 Privacy & Security
+
+Ghost Form operates with a **zero-knowledge architecture**:
+
+| Data | Collected? | Transmitted? |
+|---|---|---|
+| Keystrokes / Passwords | ❌ Never | ❌ Never |
+| Credit Card Numbers | ❌ Never | ❌ Never |
+| Browsing History | ❌ Never | ❌ Never |
+| **Domain Name (hostname only)** | ✅ Local eval | ✅ To proxy only |
+
+- All ML inference runs **locally** inside your browser via ONNX WebAssembly.
+- The Cloudflare proxy is **stateless** — it does not log or store visited domains.
+- A strict **Content Security Policy** enforces: `object-src 'none'`, `default-src 'none'`.
+
+> 📄 Read the full [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) for the complete legal statement.
+
+---
+
+## 📦 Technology Stack
+
+<p>
+  <img src="https://img.shields.io/badge/JavaScript-ES2022-F7DF1E?style=flat-square&logo=javascript&logoColor=black"/>
+  <img src="https://img.shields.io/badge/Vite-5.x-646CFF?style=flat-square&logo=vite&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Transformers.js-Xenova-FF6B35?style=flat-square&logo=huggingface&logoColor=white"/>
+  <img src="https://img.shields.io/badge/ONNX_Runtime-WebAssembly-005CED?style=flat-square&logo=microsoft&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Cloudflare_Workers-Edge-F38020?style=flat-square&logo=cloudflare&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?style=flat-square&logo=supabase&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Jest-Testing-C21325?style=flat-square&logo=jest&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Playwright-E2E-2EAD33?style=flat-square&logo=playwright&logoColor=white"/>
+</p>
+
+---
+
+## 🗺️ Development Roadmap
+
+| Phase | Status | Description |
+|---|---|---|
+| **Phase 1** — Foundation | ✅ Complete | Manifest V3 skeleton, blocklist, content script, popup UI |
+| **Phase 2** — Security & Infrastructure | ✅ Complete | Cloudflare proxy, MutationObserver, session cache, whitelist |
+| **Phase 3** — On-Device ML | 🟡 Active | ONNX inference, cosine similarity, circuit breaker, CSP hardening |
+| **Phase 4** — Chrome Web Store | 🔜 Planned | Icon assets, pre-computed anchor embeddings, production deploy |
+
+> See [PHASE_STATUS.md](./PHASE_STATUS.md) for a detailed breakdown of every completed and pending item.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+
+1. **Fork** the repository
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Commit your changes with clear, descriptive messages
+4. Open a **Pull Request** describing what changed and why
+
+Please ensure `npm test` passes before submitting.
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License**.
+
+---
+
+<div align="center">
+
+**Built with 🔒 privacy-first principles**
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=12,20,24&height=100&section=footer" width="100%"/>
+
+</div>
