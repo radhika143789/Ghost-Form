@@ -23,23 +23,45 @@
  */
 
 // ---------------------------------------------------------------------------
-// 1. Alias Generation
+// 1. Alias Generation — Local + SimpleLogin Pro
 // ---------------------------------------------------------------------------
 
 const GHOST_ALIAS_DOMAIN = 'ghostform.shield';
 
 /**
- * Generates a locally-scoped random email alias.
- * In a Pro tier, this would be replaced with an API call to SimpleLogin,
- * DuckDuckGo Email Protection, or a custom alias service.
- *
- * @returns {string} A random alias email address.
+ * Generates a locally-scoped random email alias (free tier).
+ * No network calls — instant, always available.
+ * @returns {string}
  */
 function generateLocalAlias() {
   const randomHex = Array.from(crypto.getRandomValues(new Uint8Array(6)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
   return `ghost_${randomHex}@${GHOST_ALIAS_DOMAIN}`;
+}
+
+/**
+ * Generates an alias via SimpleLogin API (Pro tier) or falls back to local.
+ * Calls the background service worker as a proxy since content scripts
+ * cannot make cross-origin requests to simplelogin.io.
+ *
+ * @returns {Promise<{alias: string, source: 'simplelogin'|'local'}>}
+ */
+async function generateAlias() {
+  return new Promise((resolve) => {
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      resolve({ alias: generateLocalAlias(), source: 'local' });
+      return;
+    }
+    chrome.runtime.sendMessage({ action: 'GENERATE_ALIAS' }, (response) => {
+      if (chrome.runtime.lastError || !response?.alias) {
+        // Background returned no alias (no API key, or API error) — use local
+        resolve({ alias: generateLocalAlias(), source: 'local' });
+        return;
+      }
+      resolve({ alias: response.alias, source: response.source ?? 'simplelogin' });
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +83,7 @@ const _offeredElements = new WeakSet();
  * @param {HTMLInputElement} realInput - The actual form input to mask.
  * @returns {{ aliasUsed: string, overlayEl: Element }} The alias and overlay element.
  */
-export function injectGhostMask(realInput) {
+export function injectGhostMask(realInput, preAlias = null) {
   if (!realInput || !realInput.isConnected) {
     return { aliasUsed: null, overlayEl: null };
   }
@@ -71,7 +93,8 @@ export function injectGhostMask(realInput) {
     return { aliasUsed: realInput.getAttribute(MASK_ACTIVE_ATTR), overlayEl: null };
   }
 
-  const alias = generateLocalAlias();
+  // Use pre-resolved alias (from SimpleLogin API) or fall back to local generation
+  const alias = preAlias || generateLocalAlias();
   const rect  = realInput.getBoundingClientRect();
 
   // Create the shadow host — an absolutely-positioned div overlaying the real input
@@ -220,13 +243,19 @@ export function offerGhostMask(inputEl, riskLevel = 'unknown') {
 
   document.body.appendChild(banner);
 
-  yesBtn.addEventListener('click', (e) => {
+  yesBtn.addEventListener('click', async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // Show loading state while alias API resolves
+    yesBtn.textContent = '⏳ Getting alias…';
+    yesBtn.disabled = true;
+
+    const { alias, source } = await generateAlias();
     banner.remove();
-    const { aliasUsed } = injectGhostMask(inputEl);
+    const { aliasUsed } = injectGhostMask(inputEl, alias);
     if (aliasUsed) {
-      console.info(`[GhostForm Ghost Masks] Email masked with alias: ${aliasUsed}`);
+      const sourceLabel = source === 'simplelogin' ? 'SimpleLogin' : 'local';
+      console.info(`[GhostForm Ghost Masks] Email masked with ${sourceLabel} alias: ${aliasUsed}`);
     }
   });
 

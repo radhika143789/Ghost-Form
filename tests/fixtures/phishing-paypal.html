@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PayPal - Log in to your account</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #fff; margin: 0; padding: 20px; }
+    .container { max-width: 400px; margin: 40px auto; }
+    .logo { color: #003087; font-size: 2rem; font-weight: bold; margin-bottom: 30px; }
+    h1 { font-size: 1.4rem; margin-bottom: 20px; color: #2c2e2f; }
+    label { display: block; font-size: 0.9rem; margin-bottom: 6px; color: #6c7378; }
+    input { width: 100%; padding: 12px; border: 1px solid #9da3a6; border-radius: 4px; font-size: 1rem; margin-bottom: 16px; box-sizing: border-box; }
+    button { width: 100%; padding: 14px; background: #0070e0; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; }
+    .footer-text { text-align: center; margin-top: 16px; font-size: 0.85rem; color: #6c7378; }
+    .secure-badge { display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: #00b300; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">PayPal</div>
+    <h1>Log in to your account</h1>
+    <form id="login-form" action="#" method="post">
+      <label for="email">Email address</label>
+      <input type="email" id="email" name="email" placeholder="Enter your PayPal email" autocomplete="email">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password">
+      <button type="submit" id="login-btn">Log In</button>
+    </form>
+    <p class="footer-text">Forgot your email or password?</p>
+    <div class="secure-badge">
+      <span>🔒</span>
+      <span>PayPal protects your financial information with industry-leading security encryption.</span>
+    </div>
+  </div>
+  <p style="display:none">PayPal Login - Secure your account, enter your email and password. Verify your identity. PayPal account security.</p>
+</body>
+</html>

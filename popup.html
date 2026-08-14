@@ -163,6 +163,49 @@
       </div>
     </div>
 
+    <!-- ── DETECTION SIGNALS PANEL ──────────────────────── -->
+    <div class="signals-panel" id="signalsPanel">
+      <div class="signals-header">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Detection Signals
+      </div>
+
+      <!-- ML Semantic Score -->
+      <div class="signal-row" id="sigML">
+        <div class="signal-icon signal-icon--ml">🧠</div>
+        <div class="signal-body">
+          <div class="signal-label">On-Device ML</div>
+          <div class="signal-value" id="sigMLVal">Analyzing…</div>
+        </div>
+        <div class="signal-badge" id="sigMLBadge"></div>
+      </div>
+
+      <!-- X-Ray Vision Structural Score -->
+      <div class="signal-row" id="sigXray">
+        <div class="signal-icon signal-icon--xray">🏗</div>
+        <div class="signal-body">
+          <div class="signal-label">X-Ray Vision</div>
+          <div class="signal-bar-wrap">
+            <div class="signal-bar-track">
+              <div class="signal-bar-fill" id="sigXrayBar" style="width:0%"></div>
+            </div>
+            <span class="signal-bar-pct" id="sigXrayPct">0%</span>
+          </div>
+        </div>
+        <div class="signal-badge" id="sigXrayBadge"></div>
+      </div>
+
+      <!-- GhostPrint Keystroke Anomaly -->
+      <div class="signal-row" id="sigGP">
+        <div class="signal-icon signal-icon--gp">⌨</div>
+        <div class="signal-body">
+          <div class="signal-label">GhostPrint</div>
+          <div class="signal-value" id="sigGPVal">No anomaly</div>
+        </div>
+        <div class="signal-dot" id="sigGPDot"></div>
+      </div>
+    </div>
+
     <div class="privacy-card">
       <div class="privacy-card-header">
         <span class="privacy-card-title">Privacy at a glance</span>

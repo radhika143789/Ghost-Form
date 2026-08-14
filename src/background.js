@@ -399,13 +399,11 @@ function logThreatLocally(domain, level, method) {
 // 5. Main Domain Status Check — combines whitelist + ML + API fallback
 // ---------------------------------------------------------------------------
 
-async function checkDomainStatus(urlString) {
+async function checkDomainStatus(urlString, tabId) {
   try {
     const url = new URL(urlString);
 
-    // High #8: Expanded internal protocol set. The previous check only covered
-    // chrome:// and chrome-extension://. about:blank, data:, and blob: URLs
-    // are also browser-internal and should never be analyzed for phishing.
+    // High #8: Expanded internal protocol set.
     const INTERNAL_PROTOCOLS = new Set([
       'chrome:', 'chrome-extension:', 'about:', 'data:', 'blob:', 'devtools:'
     ]);
@@ -422,14 +420,16 @@ async function checkDomainStatus(urlString) {
 
     // Step 2: Session cache (avoid redundant ML inference per tab session)
     const cached = await getSessionCache(`ml_status_${hostname}`);
+
+    // Step 3: Fetch GhostPrint anomaly state for this tab (if any)
+    const ghostPrint = tabId ? await getSessionCache(`ghostprint_tab_${tabId}`) : null;
+
     if (cached) {
-      return { ...cached, source: 'cache' };
+      return { ...cached, ghostPrint, source: 'cache' };
     }
 
-    // Step 3: ML-based analysis will be triggered by the content script
-    // sending the page text. Domain-level result defaults to 'unknown'
-    // until the content script sends ANALYZE_PAGE with full page text.
-    return { status: 'unknown', source: 'pending_ml' };
+    // Step 4: ML-based analysis pending — default to 'unknown'
+    return { status: 'unknown', ghostPrint, source: 'pending_ml' };
 
   } catch (e) {
     return { status: 'unknown', source: 'error' };
@@ -565,7 +565,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // --- Check domain trust status (popup or content script) ---
   if (request.action === 'checkStatus') {
-    checkDomainStatus(request.url).then(result => safeRespond(sendResponse, result));
+    const tabId = sender.tab?.id ?? null;
+    checkDomainStatus(request.url, tabId).then(result => safeRespond(sendResponse, result));
     return true;
   }
 
@@ -690,10 +691,61 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  // --- Phase 5: GhostPrint — keystroke anomaly alert from content script ---
+  if (request.action === 'GHOST_PRINT_ANOMALY') {
+    const tabId = sender.tab?.id;
+    if (tabId !== undefined) {
+      const { anomaly, zScore } = request;
+      setSessionCache(`ghostprint_tab_${tabId}`, { anomaly: Boolean(anomaly), zScore: zScore ?? 0 })
+        .catch(() => {});
+      console.log(`[GhostForm] GhostPrint anomaly tab=${tabId} z=${zScore?.toFixed(2)}`);
+    }
+    safeRespond(sendResponse, { ok: true });
+    return false; // sync response
+  }
+
+  // --- Phase 5: Ghost Masks Pro — proxy SimpleLogin alias API ---
+  // Content scripts cannot make cross-origin requests to simplelogin.io.
+  // The background service worker has no CORS restriction, so we proxy here.
+  if (request.action === 'GENERATE_ALIAS') {
+    chrome.storage.local.get({ simpleloginApiKey: '' }, async ({ simpleloginApiKey }) => {
+      if (!simpleloginApiKey) {
+        // No API key — fall back to local alias (caller should generate locally)
+        safeRespond(sendResponse, { alias: null, source: 'no_api_key' });
+        return;
+      }
+      try {
+        const res = await fetch('https://app.simplelogin.io/api/alias/random/new', {
+          method: 'POST',
+          headers: {
+            'Authentication': simpleloginApiKey,
+            'Content-Type':  'application/json',
+          },
+        });
+        if (!res.ok) throw new Error(`SimpleLogin API error: ${res.status}`);
+        const data  = await res.json();
+        const alias = data.alias || data.email;
+        if (!alias) throw new Error('SimpleLogin: no alias in response');
+        safeRespond(sendResponse, { alias, source: 'simplelogin' });
+      } catch (err) {
+        console.warn('[GhostForm] SimpleLogin alias failed:', err.message);
+        safeRespond(sendResponse, { alias: null, source: 'api_error', error: err.message });
+      }
+    });
+    return true; // async
+  }
+
   // Fix #19: Unknown action fallback — prevents callers from hanging indefinitely
   console.warn('[GhostForm] Unknown message action:', request.action);
   safeRespond(sendResponse, { error: `Unknown action: ${request.action}` });
   return false;
+});
+
+// Clean up per-tab GhostPrint state when a tab is closed
+chrome.tabs.onRemoved.addListener((tabId) => {
+  // Remove tab-scoped session cache key (fire-and-forget)
+  chrome.storage.session.remove(`ghostprint_tab_${tabId}`).catch(() => {});
+  rateLimitBuckets.delete(tabId);
 });
 
 // Pre-warm the offscreen document and ML pipeline when the service worker starts

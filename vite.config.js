@@ -7,6 +7,9 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // ml_worker.js bundles the full ONNX Runtime (~800 KB minified, ~200 KB gzip).
+    // This is expected — raise the warning limit to avoid noise in CI.
+    chunkSizeWarningLimit: 1000,
     target: 'esnext',
     // Minify in production for smaller install size and harder-to-reverse-engineer
     // detection logic. Use sourcemaps for debugging instead of raw source.

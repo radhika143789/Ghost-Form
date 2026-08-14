@@ -134,10 +134,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             updateUI('unknown', 0);
             return;
           }
-          const status   = response?.status ?? 'unknown';
-          const trackers = response?.trackersBlocked ?? 0;
-          const forms    = response?.formsWatched    ?? 0;
-          updateUI(status, trackers, forms);
+          const status      = response?.status          ?? 'unknown';
+          const trackers    = response?.trackersBlocked ?? 0;
+          const forms       = response?.formsWatched    ?? 0;
+          const topMatch    = response?.topMatch        ?? null;
+          const xrayScore   = response?.structuralScore ?? 0;
+          const ghostPrint  = response?.ghostPrint      ?? null;
+          updateUI(status, trackers, forms, topMatch, xrayScore, ghostPrint);
         }
       );
     } catch (e) {
@@ -173,7 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 /* ── updateUI ─────────────────────────────────────────── */
-function updateUI(status, trackersBlocked = 0, formsWatched = 0) {
+function updateUI(status, trackersBlocked = 0, formsWatched = 0, topMatch = null, xrayScore = 0, ghostPrint = null) {
   const card            = document.getElementById('statusCard');
   const title           = document.getElementById('statusTitle');
   const desc            = document.getElementById('statusDesc');
@@ -185,7 +188,7 @@ function updateUI(status, trackersBlocked = 0, formsWatched = 0) {
   const statTrackers    = document.getElementById('statTrackers');
   const statForms       = document.getElementById('statForms');
   const statRisk        = document.getElementById('statRisk');
-  const meta = getStatusMeta(status, trackersBlocked, formsWatched);
+  const meta = getStatusMeta(status, trackersBlocked, formsWatched, topMatch, xrayScore);
 
   card.className = 'status-card';
   card.classList.add(meta.stateClass);
@@ -198,6 +201,71 @@ function updateUI(status, trackersBlocked = 0, formsWatched = 0) {
   metaPrivacy.textContent = meta.metaPrivacy;
   iconWrap.innerHTML = ICONS[meta.icon] || ICONS.unknown;
   setStats(statTrackers, statForms, statRisk, trackersBlocked, formsWatched, meta.statRisk, meta.riskClass);
+
+  // Render Detection Signals panel
+  renderSignals(topMatch, xrayScore, ghostPrint);
+}
+
+/**
+ * Populates the Detection Signals panel with live data from the background.
+ *
+ * @param {{label:string,score:number}|null} topMatch - Top ML brand match
+ * @param {number} xrayScore - X-Ray Vision structural risk score (0–1)
+ * @param {{anomaly:boolean,zScore:number}|null} ghostPrint - GhostPrint keystroke anomaly state
+ */
+function renderSignals(topMatch, xrayScore, ghostPrint) {
+  // ── ML Signal ────────────────────────────────────────
+  const sigMLVal   = document.getElementById('sigMLVal');
+  const sigMLBadge = document.getElementById('sigMLBadge');
+  if (sigMLVal && sigMLBadge) {
+    if (topMatch && topMatch.score > 0) {
+      const pct  = (topMatch.score * 100).toFixed(1);
+      const risk = topMatch.score >= 0.80 ? 'high' : topMatch.score >= 0.65 ? 'med' : 'low';
+      const riskLabel = topMatch.score >= 0.80 ? 'HIGH' : topMatch.score >= 0.65 ? 'MED' : 'SAFE';
+      sigMLVal.textContent  = `${topMatch.label} — ${pct}% match`;
+      sigMLBadge.textContent = riskLabel;
+      sigMLBadge.className   = `signal-badge ${risk}`;
+    } else {
+      sigMLVal.textContent   = 'No brand match detected';
+      sigMLBadge.textContent = 'SAFE';
+      sigMLBadge.className   = 'signal-badge low';
+    }
+  }
+
+  // ── X-Ray Signal ──────────────────────────────────────
+  const sigXrayBar   = document.getElementById('sigXrayBar');
+  const sigXrayPct   = document.getElementById('sigXrayPct');
+  const sigXrayBadge = document.getElementById('sigXrayBadge');
+  if (sigXrayBar && sigXrayPct && sigXrayBadge) {
+    const score  = Math.min(1, Math.max(0, xrayScore || 0));
+    const pctStr = `${(score * 100).toFixed(0)}%`;
+    const risk   = score >= 0.75 ? 'high' : score >= 0.45 ? 'med' : 'low';
+    const riskLabel = score >= 0.75 ? 'HIGH' : score >= 0.45 ? 'MED' : 'SAFE';
+    sigXrayBar.style.width    = pctStr;
+    sigXrayPct.textContent    = pctStr;
+    sigXrayBadge.textContent  = riskLabel;
+    sigXrayBadge.className    = `signal-badge ${risk}`;
+    // Tint the bar fill color based on risk
+    sigXrayBar.style.background = risk === 'high'
+      ? 'linear-gradient(90deg,#ef4444,#b91c1c)'
+      : risk === 'med'
+        ? 'linear-gradient(90deg,#fbbf24,#d97706)'
+        : 'linear-gradient(90deg,#00d4ff,#7c3aed)';
+  }
+
+  // ── GhostPrint Signal ─────────────────────────────────
+  const sigGPVal = document.getElementById('sigGPVal');
+  const sigGPDot = document.getElementById('sigGPDot');
+  if (sigGPVal && sigGPDot) {
+    if (ghostPrint?.anomaly) {
+      const z = ghostPrint.zScore ? ghostPrint.zScore.toFixed(1) : '?';
+      sigGPVal.textContent = `⚠️ Anomaly detected (z=${z})`;
+      sigGPDot.classList.add('anomaly');
+    } else {
+      sigGPVal.textContent = ghostPrint ? 'Normal typing pattern' : 'Monitoring…';
+      sigGPDot.classList.remove('anomaly');
+    }
+  }
 }
 
 function setStats(trackerEl, formsEl, riskEl, trackers, forms, riskText, riskClass) {

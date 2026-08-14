@@ -1,0 +1,23 @@
+[
+  {
+    "domain": "google.com",
+    "finalUrl": "https://www.google.com/",
+    "statusCode": 200,
+    "durationMs": 156,
+    "verifiedAt": "2026-07-29T14:14:23.630Z"
+  },
+  {
+    "domain": "paypal.com",
+    "finalUrl": "https://www.paypal.com/in/home",
+    "statusCode": 200,
+    "durationMs": 1071,
+    "verifiedAt": "2026-07-29T14:14:25.205Z"
+  },
+  {
+    "domain": "github.com",
+    "finalUrl": "https://github.com",
+    "statusCode": 200,
+    "durationMs": 503,
+    "verifiedAt": "2026-07-29T14:14:25.709Z"
+  }
+]

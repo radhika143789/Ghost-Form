@@ -84,6 +84,39 @@
         </div>
       </section>
 
+      <!-- Section: Ghost Masks Pro -->
+      <section class="settings-section">
+        <div class="section-header">
+          <div class="section-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="section-title">Ghost Masks Pro <span class="badge-pro">PRO</span></h2>
+            <p class="section-desc">Connect a <a href="https://simplelogin.io" target="_blank" rel="noopener">SimpleLogin</a> account to generate real, forwarding email aliases instead of local placeholders.</p>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <div class="input-wrap">
+            <svg class="input-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+            <input type="password" id="slApiKey" class="domain-input" placeholder="Paste your SimpleLogin API key…" autocomplete="off" spellcheck="false">
+          </div>
+          <button id="slTestBtn" class="btn-secondary">Test</button>
+          <button id="slSaveBtn" class="btn-primary">Save</button>
+        </div>
+
+        <p id="slStatusMsg" class="status-msg" role="alert"></p>
+
+        <p class="section-hint">
+          Get your API key from <a href="https://app.simplelogin.io/dashboard/api-key" target="_blank" rel="noopener">SimpleLogin → Settings → API keys</a>.
+          Without a key, Ghost Masks uses a local <code>@ghostform.shield</code> placeholder alias.
+        </p>
+      </section>
+
       <!-- Section: Privacy Guarantees -->
       <section class="settings-section privacy-section">
         <h3 class="privacy-title">Privacy Guarantees</h3>

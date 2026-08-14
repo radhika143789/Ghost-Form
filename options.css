@@ -438,3 +438,73 @@ body {
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 4px; }
+
+/* ── Ghost Masks Pro Section ─────────────────────────────── */
+.badge-pro {
+  display: inline-block;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  background: linear-gradient(135deg, #7c3aed, #00d4ff);
+  color: #fff;
+  border-radius: 99px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+  height: 42px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-sub);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition);
+  flex-shrink: 0;
+}
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--purple);
+  color: var(--text);
+  background: rgba(124,58,237,0.08);
+}
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.section-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 10px;
+  padding: 0 2px;
+}
+.section-hint a {
+  color: var(--purple);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.section-hint a:hover { color: #a78bfa; text-decoration: underline; }
+.section-hint code {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--cyan);
+}
+
+.settings-section a {
+  color: var(--purple);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+.settings-section a:hover { color: #a78bfa; }
+

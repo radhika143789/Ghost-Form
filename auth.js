@@ -62,17 +62,64 @@ function saveSession(session, user) {
   }
 }
 
+/** Returns raw session from storage WITHOUT refresh check. Use getValidSession() instead. */
 function getSession() {
   try {
     const raw = localStorage.getItem('gf_session');
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (Date.now() > data.expires_at) {
+    // Expired and no refresh token — clear it
+    if (Date.now() > data.expires_at && !data.refresh_token) {
       localStorage.removeItem('gf_session');
       return null;
     }
     return data;
   } catch { return null; }
+}
+
+/**
+ * Returns a valid (non-expired) session, proactively refreshing the token
+ * if it expires in less than 5 minutes.  Handles the edge case where the
+ * page is left open overnight and the token silently expires.
+ *
+ * @returns {Promise<object|null>} Valid session object, or null if not authenticated.
+ */
+async function getValidSession() {
+  const session = getSession();
+  if (!session) return null;
+
+  const FIVE_MINUTES_MS = 5 * 60 * 1000;
+  const isExpiringSoon = (session.expires_at - Date.now()) < FIVE_MINUTES_MS;
+
+  if (isExpiringSoon && session.refresh_token) {
+    try {
+      const refreshed = await supabaseRefreshToken(session.refresh_token);
+      if (refreshed && refreshed.access_token) {
+        saveSession(refreshed, refreshed.user);
+        return getSession(); // return the freshly saved session
+      }
+    } catch (err) {
+      console.warn('[GhostForm Auth] Token refresh failed:', err.message);
+      // If refresh fails and token is fully expired, clear and return null
+      if (Date.now() > session.expires_at) {
+        localStorage.removeItem('gf_session');
+        if (typeof chrome !== 'undefined' && chrome.storage) {
+          chrome.storage.local.remove('gf_session');
+        }
+        return null;
+      }
+    }
+  }
+
+  // Token not yet expired — return as-is
+  if (Date.now() < session.expires_at) return session;
+
+  // Fully expired with no valid refresh — clear
+  localStorage.removeItem('gf_session');
+  if (typeof chrome !== 'undefined' && chrome.storage) {
+    chrome.storage.local.remove('gf_session');
+  }
+  return null;
 }
 
 /* ── Supabase REST Auth API ───────────────────────────────── */
@@ -110,6 +157,28 @@ async function supabaseSignIn(email, password) {
   return data;
 }
 
+/**
+ * Exchanges a refresh_token for a new access_token + refresh_token pair.
+ * Called automatically by getValidSession() before the current token expires.
+ *
+ * @param {string} refreshToken - The stored Supabase refresh token.
+ * @returns {Promise<object>} New session data with access_token, refresh_token, expires_in.
+ */
+async function supabaseRefreshToken(refreshToken) {
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':  'application/json',
+      'apikey':        SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.msg || 'Token refresh failed');
+  return data;
+}
+
 /* ── Redirect to dashboard ────────────────────────────────── */
 function redirectToDashboard() {
   switchView('success');
@@ -119,8 +188,8 @@ function redirectToDashboard() {
 }
 
 /* ── Init: check if already logged in ────────────────────── */
-function initAuthPage() {
-  const session = getSession();
+async function initAuthPage() {
+  const session = await getValidSession();
   if (session) {
     // Already logged in — go straight to dashboard
     window.location.href = 'dashboard.html';

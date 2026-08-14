@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import { ShieldAlert, ShieldX, ShieldCheck, RefreshCw } from 'lucide-react'
 import ThreatTable from './ThreatTable'
+import ThreatChart from './ThreatChart'
+import UserTable from './UserTable'
 
 // ─────────────────────────────────────────────────────────────
 // StatsCard — individual summary card
@@ -182,6 +184,16 @@ export default function Overview() {
           loading={loading}
         />
       </div>
+
+      <hr className="border-ghost-border my-8" />
+      
+      <ThreatChart />
+
+      <hr className="border-ghost-border my-8" />
+
+      <UserTable />
+
+      <hr className="border-ghost-border my-8" />
 
       {/* Error banner */}
       {error && (

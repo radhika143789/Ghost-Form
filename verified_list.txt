@@ -1,0 +1,3 @@
+google.com
+paypal.com
+github.com

@@ -1,4 +1,23 @@
-export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0) {
+/**
+ * Returns UI metadata for a given Ghost Form status.
+ *
+ * @param {'safe'|'unknown'|'unsafe'} status
+ * @param {number} [trackersBlocked=0]
+ * @param {number} [formsWatched=0]
+ * @param {{label: string, score: number}|null} [topMatch=null] - Top ML brand match
+ * @param {number} [xrayScore=0] - X-Ray Vision structural risk score
+ * @returns {object} UI metadata object
+ */
+export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0, topMatch = null, xrayScore = 0) {
+  // Build ML brand match insight string
+  const mlInsight = topMatch && topMatch.score > 0
+    ? `ML match: ${topMatch.label} (${(topMatch.score * 100).toFixed(1)}% similarity)`
+    : 'On-device ML analysis complete';
+
+  const xrayInsight = xrayScore > 0
+    ? ` • X-Ray score: ${(xrayScore * 100).toFixed(0)}%`
+    : '';
+
   const base = {
     status,
     trackersBlocked,
@@ -8,7 +27,7 @@ export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0) {
     icon: 'unknown',
     stateClass: 'state-unknown',
     pill: 'Monitoring',
-    insight: 'This site is being checked locally with on-device analysis.',
+    insight: `${mlInsight}${xrayInsight}`,
     metaLocal: 'On-device checks',
     metaPrivacy: 'Zero keystroke logging',
     statRisk: 'MED',
@@ -23,7 +42,9 @@ export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0) {
       icon: 'safe',
       stateClass: 'state-safe',
       pill: 'Protected',
-      insight: 'GhostForm confirmed this page looks legitimate and kept analysis local.',
+      insight: topMatch
+        ? `Verified safe • ${mlInsight}`
+        : 'GhostForm confirmed this page looks legitimate and kept analysis local.',
       metaLocal: 'Local trust checks',
       metaPrivacy: 'No form data shared',
       statRisk: 'LOW',
@@ -32,16 +53,19 @@ export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0) {
   }
 
   if (status === 'unsafe') {
+    const brandWarning = topMatch
+      ? `Impersonating: ${topMatch.label} (${(topMatch.score * 100).toFixed(1)}% match)`
+      : 'High similarity to known phishing patterns';
     return {
       ...base,
       title: 'Phishing Risk!',
-      desc: 'High similarity to known phishing patterns. Do NOT enter credentials or card info.',
+      desc: `${brandWarning}. Do NOT enter credentials or card info.`,
       icon: 'unsafe',
       stateClass: 'state-unsafe',
-      pill: 'Attention',
-      insight: 'Suspicious behavior was detected, so this site should be treated as high risk.',
-      metaLocal: 'Threat pattern scan',
-      metaPrivacy: 'Sensitive fields stay local',
+      pill: 'Danger',
+      insight: `${brandWarning}${xrayInsight}`,
+      metaLocal: 'Threat pattern detected',
+      metaPrivacy: 'Block all submissions',
       statRisk: 'HIGH',
       riskClass: 'high',
     };
@@ -49,3 +73,4 @@ export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0) {
 
   return base;
 }
+
