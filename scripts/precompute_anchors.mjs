@@ -13,7 +13,7 @@
  *   scripts/anchor_snippet.js       — copy-paste snippet for ml_worker.js
  */
 
-import { pipeline } from '@huggingface/transformers';
+import { pipeline } from '@xenova/transformers';
 import { writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';

@@ -1,0 +1,168 @@
+/**
+ * precompute_anchors_wasm.mjs — Ghost Form ML Utility (WASM-based, Node v24 compatible)
+ *
+ * Uses @xenova/transformers with WASM backend (not native onnxruntime-node)
+ * to compute 384-dimensional brand anchor embeddings on Node v24.
+ *
+ * Usage:
+ *   node scripts/precompute_anchors_wasm.mjs
+ */
+
+import { env, pipeline } from '@xenova/transformers';
+import { writeFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Force WASM backend — avoids broken onnxruntime-node native bindings on Node v24
+env.backends.onnx.wasm.numThreads = 1;
+
+// Brand anchor definitions — keep in sync with ml_worker.js BRAND_ANCHORS
+const BRAND_ANCHORS = {
+  paypal: {
+    label: 'PayPal Login',
+    anchorText: 'PayPal Login - Secure your account, enter your email and password',
+  },
+  google_accounts: {
+    label: 'Google Sign In',
+    anchorText: 'Sign in to your Google Account - Enter your email',
+  },
+  amazon: {
+    label: 'Amazon Sign In',
+    anchorText: 'Amazon Sign In - Enter your email or mobile number and password',
+  },
+  microsoft: {
+    label: 'Microsoft / Office 365 Sign In',
+    anchorText: 'Sign in to your Microsoft account - Enter your email address or phone number',
+  },
+  apple: {
+    label: 'Apple ID Sign In',
+    anchorText: 'Sign in with your Apple ID - Enter your Apple ID and password to sign in',
+  },
+  facebook: {
+    label: 'Facebook Login',
+    anchorText: 'Facebook - Log in or create an account - Enter your email or phone and password',
+  },
+  instagram: {
+    label: 'Instagram Login',
+    anchorText: 'Instagram - Log in - Enter your username email or phone and password',
+  },
+  netflix: {
+    label: 'Netflix Sign In',
+    anchorText: 'Netflix - Sign In - Enter your email or phone and password to watch movies',
+  },
+  chase_bank: {
+    label: 'Chase Bank Online Login',
+    anchorText: 'Chase Online - Sign in - Enter your username and password to access your account',
+  },
+  dropbox: {
+    label: 'Dropbox Login',
+    anchorText: 'Sign in to Dropbox - Enter your email and password',
+  },
+  linkedin: {
+    label: 'LinkedIn Sign In',
+    anchorText: 'LinkedIn - Sign In - Enter your email and password to access your professional network',
+  },
+  twitter_x: {
+    label: 'Twitter / X Sign In',
+    anchorText: 'Sign in to X - Enter your phone email or username and password',
+  },
+  wellsfargo: {
+    label: 'Wells Fargo Online Banking',
+    anchorText: 'Wells Fargo Online - Sign On - Enter your username and password to access your accounts',
+  },
+  steam: {
+    label: 'Steam Sign In',
+    anchorText: 'Steam Login - Sign in to your Steam account - Enter your account name and password',
+  },
+  generic_phish: {
+    label: 'Generic Phishing Login',
+    anchorText: 'Verify your account - Confirm your identity - Enter your email username and password to continue',
+  },
+};
+
+console.log('[GhostForm Precompute] Loading Xenova/all-MiniLM-L6-v2 (WASM, quantized)...');
+
+const extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+  quantized: true,
+  progress_callback: (p) => {
+    if (p.status === 'downloading') {
+      const pct = p.loaded && p.total ? Math.round((p.loaded / p.total) * 100) : '?';
+      process.stdout.write(`\r  Downloading ${p.file} … ${pct}%    `);
+    }
+    if (p.status === 'done') process.stdout.write(`\n  ✅ ${p.file}\n`);
+  },
+});
+
+console.log('\n[GhostForm Precompute] Model ready. Computing anchor embeddings...\n');
+
+const results = {};
+
+for (const [key, anchor] of Object.entries(BRAND_ANCHORS)) {
+  process.stdout.write(`  ${anchor.label} ... `);
+
+  const output = await extractor(anchor.anchorText, { pooling: 'mean', normalize: true });
+  const floatArr = Array.from(output.data);
+
+  if (floatArr.length !== 384) {
+    console.error(`\n  ❌ Unexpected embedding size: ${floatArr.length}`);
+    process.exit(1);
+  }
+
+  const norm = Math.sqrt(floatArr.reduce((s, v) => s + v * v, 0));
+  if (Math.abs(norm - 1.0) > 0.02) {
+    console.error(`\n  ❌ Vector not normalized: ||v|| = ${norm.toFixed(6)}`);
+    process.exit(1);
+  }
+
+  results[key] = {
+    label: anchor.label,
+    anchorText: anchor.anchorText,
+    // 6 decimal places: ~40% smaller file, well above cosine sim precision needs
+    embedding: floatArr.map(v => parseFloat(v.toFixed(6))),
+  };
+
+  console.log(`done  (||v|| = ${norm.toFixed(6)})`);
+}
+
+// ── Write outputs ─────────────────────────────────────────────────────────────
+
+const jsonPath    = resolve(__dirname, 'anchor_embeddings.json');
+const snippetPath = resolve(__dirname, 'anchor_snippet.js');
+
+writeFileSync(jsonPath, JSON.stringify(results, null, 2), 'utf8');
+console.log(`\n✅ Saved: ${jsonPath}`);
+
+// Build the BRAND_ANCHORS block ready to paste into ml_worker.js
+let snippet = `// ── Pre-computed brand anchor embeddings ──────────────────────────────────
+// Generated by: node scripts/precompute_anchors_wasm.mjs
+// Model:        Xenova/all-MiniLM-L6-v2 (INT8 quantized, WASM)
+// Dimensions:   384
+// Pooling:      mean + L2 normalization
+// Generated at: ${new Date().toISOString()}
+// ─────────────────────────────────────────────────────────────────────────────
+
+const BRAND_ANCHORS = {\n`;
+
+for (const [key, data] of Object.entries(results)) {
+  snippet += `  ${key}: {\n`;
+  snippet += `    label: ${JSON.stringify(data.label)},\n`;
+  snippet += `    anchorText: ${JSON.stringify(data.anchorText)},\n`;
+  snippet += `    embedding: new Float32Array([\n`;
+
+  const chunks = [];
+  for (let i = 0; i < data.embedding.length; i += 8) {
+    chunks.push('      ' + data.embedding.slice(i, i + 8).join(', '));
+  }
+  snippet += chunks.join(',\n') + '\n';
+  snippet += `    ]),\n`;
+  snippet += `  },\n`;
+}
+
+snippet += `};\n`;
+
+writeFileSync(snippetPath, snippet, 'utf8');
+console.log(`✅ Saved: ${snippetPath}`);
+console.log(`\n📋 ${Object.keys(results).length} anchor embeddings ready.`);
+console.log('🚀 Now run: node scripts/patch_ml_worker.mjs to inject into ml_worker.js');
