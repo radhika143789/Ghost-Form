@@ -508,3 +508,54 @@ body {
 }
 .settings-section a:hover { color: #a78bfa; }
 
+/* ── Pro Plan Cards ──────────────────────────────────────────────────── */
+.pro-plan-cards {
+  display: flex; gap: 14px; margin-top: 12px;
+}
+.pro-plan-card {
+  flex: 1; padding: 18px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.pro-plan-card.featured {
+  border-color: var(--purple); box-shadow: 0 0 20px rgba(124,58,237,0.15);
+}
+.pro-plan-name { font-size: 0.85rem; font-weight: 600; color: var(--text-sub); }
+.pro-plan-price {
+  font-size: 1.6rem; font-weight: 800; color: var(--text);
+  font-family: var(--font-mono);
+}
+.pro-plan-price span { font-size: 0.75rem; font-weight: 400; color: var(--text-sub); }
+.badge-savings {
+  background: rgba(0,255,136,0.12); color: var(--green); font-size: 0.65rem;
+  font-weight: 700; padding: 2px 8px; border-radius: 999px;
+}
+
+/* ── Sync Toggle ─────────────────────────────────────────────────────── */
+.toggle-row-settings {
+  margin: 12px 0;
+}
+.toggle-label-settings {
+  display: flex; align-items: center; justify-content: space-between;
+  cursor: pointer; font-size: 0.85rem; color: var(--text-sub);
+  gap: 12px;
+}
+.toggle-label-settings input[type="checkbox"] {
+  width: 40px; height: 22px; appearance: none; -webkit-appearance: none;
+  background: rgba(255,255,255,0.1); border-radius: 12px; position: relative;
+  cursor: pointer; transition: background var(--transition);
+  flex-shrink: 0;
+}
+.toggle-label-settings input[type="checkbox"]::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px; background: #fff; border-radius: 50%;
+  transition: transform var(--transition);
+}
+.toggle-label-settings input[type="checkbox"]:checked {
+  background: var(--green);
+}
+.toggle-label-settings input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+}
+

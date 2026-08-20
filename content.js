@@ -709,6 +709,37 @@ const initialScan = () => {
   if (typeof ghostFormActiveShield !== 'undefined') {
     ghostFormActiveShield.runActiveShieldScan(document);
   }
+
+  // ── Phase 5: X-Ray Vision — compute structural score and send to background ──
+  if (typeof ghostFormXRay !== 'undefined') {
+    try {
+      const xrayResult = ghostFormXRay.analyzePageStructure();
+      if (xrayResult && xrayResult.score > 0) {
+        chrome.runtime.sendMessage({
+          action: 'STORE_XRAY_SCORE',
+          hostname: window.location.hostname,
+          score: xrayResult.score,
+          matchedTemplate: xrayResult.matchedTemplate,
+          structuralRisk: xrayResult.structuralRisk,
+        });
+
+        // If X-Ray detects unsafe, escalate status and warn
+        if (xrayResult.structuralRisk === 'unsafe' && currentStatus !== 'unsafe') {
+          currentStatus = 'unsafe';
+          document.querySelectorAll('input[type="password"], input[type="email"]').forEach(showWarning);
+        }
+      }
+    } catch (e) {
+      console.warn('[GhostForm] X-Ray Vision analysis error:', e.message);
+    }
+  }
+
+  // ── Phase 5: Ghost Masks — auto-offer on risky email fields ───────────
+  if (typeof ghostFormMasks !== 'undefined' && currentStatus !== 'safe') {
+    document.querySelectorAll('input[type="email"], input[type="text"]').forEach(input => {
+      ghostFormMasks.offerGhostMask(input, currentStatus);
+    });
+  }
 };
 
 if (typeof requestIdleCallback === 'function') {

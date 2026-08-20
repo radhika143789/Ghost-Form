@@ -158,5 +158,116 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // ── Pro Subscription Management ────────────────────────────────────────
+  const optProBadge       = document.getElementById('optProBadge');
+  const optProDesc        = document.getElementById('optProDesc');
+  const proPlanCards      = document.getElementById('proPlanCards');
+  const proManageSection  = document.getElementById('proManageSection');
+
+  chrome.storage.local.get({ gf_pro_status: null, gf_session: null }, (result) => {
+    const pro = result.gf_pro_status;
+    const session = result.gf_session;
+
+    if (pro?.active) {
+      if (optProBadge) { optProBadge.textContent = '✨ PRO'; optProBadge.style.background = 'linear-gradient(135deg,#7c3aed,#a78bfa)'; optProBadge.style.color = '#fff'; }
+      if (optProDesc) optProDesc.textContent = `You're on the ${pro.plan || 'Pro'} plan. Thank you for supporting Ghost Form!`;
+      if (proPlanCards) proPlanCards.style.display = 'none';
+      if (proManageSection) proManageSection.style.display = 'block';
+    }
+
+    // Upgrade buttons
+    document.getElementById('optBtnUpgradeMonthly')?.addEventListener('click', async () => {
+      const s = result.gf_session;
+      if (!s?.access_token) { showStatus('Please sign in first to upgrade.', true); return; }
+      try {
+        const res = await fetch(`https://czoleruusckauzjcmmml.supabase.co/functions/v1/create-checkout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${s.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: 'pro_monthly' }),
+        });
+        const { url } = await res.json();
+        if (url) window.open(url, '_blank');
+      } catch (e) { showStatus('Checkout failed: ' + e.message, true); }
+    });
+
+    document.getElementById('optBtnUpgradeAnnual')?.addEventListener('click', async () => {
+      const s = result.gf_session;
+      if (!s?.access_token) { showStatus('Please sign in first to upgrade.', true); return; }
+      try {
+        const res = await fetch(`https://czoleruusckauzjcmmml.supabase.co/functions/v1/create-checkout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${s.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: 'pro_annual' }),
+        });
+        const { url } = await res.json();
+        if (url) window.open(url, '_blank');
+      } catch (e) { showStatus('Checkout failed: ' + e.message, true); }
+    });
+
+    // Manage billing
+    document.getElementById('optBtnManageBilling')?.addEventListener('click', async () => {
+      const s = result.gf_session;
+      if (!s?.access_token) { showStatus('Please sign in first.', true); return; }
+      try {
+        const res = await fetch(`https://czoleruusckauzjcmmml.supabase.co/functions/v1/create-checkout`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${s.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'portal' }),
+        });
+        const { url } = await res.json();
+        if (url) window.open(url, '_blank');
+      } catch (e) { showStatus('Could not open billing portal: ' + e.message, true); }
+    });
+  });
+
+  // ── Alias History ──────────────────────────────────────────────────────
+  const aliasListEl    = document.getElementById('aliasHistoryList');
+  const aliasEmptyEl   = document.getElementById('aliasEmptyState');
+
+  chrome.storage.local.get({ gf_alias_history: [] }, ({ gf_alias_history }) => {
+    const aliases = gf_alias_history || [];
+    if (aliases.length === 0) {
+      if (aliasEmptyEl) aliasEmptyEl.style.display = 'flex';
+      return;
+    }
+    if (aliasEmptyEl) aliasEmptyEl.style.display = 'none';
+    aliases.slice(0, 20).forEach(entry => {
+      const li = document.createElement('li');
+      const span = document.createElement('span');
+      span.className = 'domain-text';
+      span.textContent = `${entry.alias} — ${entry.domain || 'unknown'} (${new Date(entry.createdAt).toLocaleDateString()})`;
+      li.appendChild(span);
+      aliasListEl.appendChild(li);
+    });
+  });
+
+  // ── Multi-Device Sync Toggle ───────────────────────────────────────────
+  const syncToggle = document.getElementById('syncToggle');
+  if (syncToggle) {
+    chrome.storage.local.get({ gf_sync_enabled: false }, ({ gf_sync_enabled }) => {
+      syncToggle.checked = gf_sync_enabled === true;
+    });
+
+    syncToggle.addEventListener('change', () => {
+      const enabled = syncToggle.checked;
+      chrome.storage.local.set({ gf_sync_enabled: enabled }, () => {
+        if (enabled) {
+          // Push current whitelist to sync
+          chrome.storage.local.get({ userWhitelist: [], protectionEnabled: true }, (local) => {
+            chrome.storage.sync.set({
+              gf_whitelist: local.userWhitelist || [],
+              gf_protection: local.protectionEnabled !== false,
+              gf_sync_ts: Date.now(),
+            }, () => {
+              showStatus('✓ Sync enabled. Whitelist pushed to all devices.');
+            });
+          });
+        } else {
+          showStatus('Sync disabled. Changes will stay local to this device.');
+        }
+      });
+    });
+  }
 });
 

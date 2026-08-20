@@ -424,12 +424,15 @@ async function checkDomainStatus(urlString, tabId) {
     // Step 3: Fetch GhostPrint anomaly state for this tab (if any)
     const ghostPrint = tabId ? await getSessionCache(`ghostprint_tab_${tabId}`) : null;
 
+    // Step 3b: Fetch X-Ray Vision structural score for this hostname
+    const xrayData = await getSessionCache(`xray_${hostname}`);
+
     if (cached) {
-      return { ...cached, ghostPrint, source: 'cache' };
+      return { ...cached, ghostPrint, structuralScore: xrayData?.score ?? 0, matchedTemplate: xrayData?.matchedTemplate ?? null, source: 'cache' };
     }
 
     // Step 4: ML-based analysis pending — default to 'unknown'
-    return { status: 'unknown', ghostPrint, source: 'pending_ml' };
+    return { status: 'unknown', ghostPrint, structuralScore: xrayData?.score ?? 0, matchedTemplate: xrayData?.matchedTemplate ?? null, source: 'pending_ml' };
 
   } catch (e) {
     return { status: 'unknown', source: 'error' };
@@ -681,6 +684,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       })
       .catch(() => safeRespond(sendResponse, { findings: [] }));
     return true;
+  }
+
+  // --- Phase 5: X-Ray Vision — store structural score from content script ---
+  if (request.action === 'STORE_XRAY_SCORE') {
+    const { hostname, score, matchedTemplate, structuralRisk } = request;
+    if (hostname) {
+      setSessionCache(`xray_${hostname}`, { score, matchedTemplate, structuralRisk })
+        .catch(() => {});
+    }
+    safeRespond(sendResponse, { ok: true });
+    return false;
   }
 
   // --- Ping the ML worker to pre-warm it ---

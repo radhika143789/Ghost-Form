@@ -44,6 +44,37 @@
     .lp-btn.primary:hover { box-shadow: 0 0 14px rgba(0,255,136,0.4); }
     .lp-btn.secondary { background: rgba(255,255,255,0.06); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
     .lp-btn.secondary:hover { background: rgba(255,255,255,0.1); }
+    /* Pro badge */
+    .pro-badge {
+      background: linear-gradient(135deg, #7c3aed, #a78bfa);
+      color: #fff; font-size: 0.6rem; font-weight: 700; padding: 1px 7px;
+      border-radius: 999px; letter-spacing: 0.04em; flex-shrink: 0;
+    }
+    /* Pro upgrade card */
+    .pro-upgrade-card {
+      padding: 12px 14px; background: rgba(124,58,237,0.08);
+      border-bottom: 1px solid rgba(124,58,237,0.18);
+    }
+    .pro-upgrade-header { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .pro-upgrade-title { font-size: 0.78rem; font-weight: 700; color: #a78bfa; }
+    .pro-upgrade-features { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; }
+    .pro-feat { font-size: 0.7rem; color: #94a3b8; }
+    .pro-upgrade-btns { display: flex; gap: 6px; }
+    .pro-upgrade-btn {
+      flex: 1; padding: 7px 0; border-radius: 6px; font-size: 0.72rem;
+      font-weight: 600; border: none; cursor: pointer; font-family: inherit;
+      transition: all 0.2s;
+    }
+    .pro-upgrade-btn.primary {
+      background: linear-gradient(135deg, #7c3aed, #a78bfa); color: #fff;
+    }
+    .pro-upgrade-btn.primary:hover { box-shadow: 0 0 14px rgba(124,58,237,0.4); }
+    .pro-upgrade-btn.secondary {
+      background: rgba(255,255,255,0.06); color: #a78bfa;
+      border: 1px solid rgba(124,58,237,0.3);
+    }
+    .pro-upgrade-btn.secondary:hover { background: rgba(124,58,237,0.15); }
+    .savings { font-size: 0.6rem; color: #00ff88; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -80,6 +111,7 @@
   <div class="user-strip" id="userStrip" style="display:none;">
     <span class="usr-dot"></span>
     <span class="usr-email" id="popupUserEmail">user@example.com</span>
+    <span class="pro-badge" id="proBadge" style="display:none;">✨ PRO</span>
     <button class="strip-btn dashboard" id="btnDashboard" title="Open Dashboard">Dashboard ↗</button>
     <button class="strip-btn logout" id="btnLogout" title="Sign out">Sign out</button>
   </div>
@@ -92,6 +124,24 @@
       <button class="lp-btn secondary" id="btnSkipAuth">Continue as Guest</button>
     </div>
   </div>
+
+  <!-- ── PRO UPGRADE CARD (free users) ──────────────────── -->
+  <div class="pro-upgrade-card" id="proUpgradeCard" style="display:none;">
+    <div class="pro-upgrade-header">
+      <span>🔮</span>
+      <span class="pro-upgrade-title">Upgrade to Ghost Form Pro</span>
+    </div>
+    <div class="pro-upgrade-features">
+      <span class="pro-feat">✅ Real email aliases (SimpleLogin)</span>
+      <span class="pro-feat">✅ Multi-device sync</span>
+      <span class="pro-feat">✅ Priority threat alerts</span>
+    </div>
+    <div class="pro-upgrade-btns">
+      <button class="pro-upgrade-btn primary" id="btnUpgradeMonthly">$4.99/mo</button>
+      <button class="pro-upgrade-btn secondary" id="btnUpgradeAnnual">$39.99/yr <span class="savings">Save 33%</span></button>
+    </div>
+  </div>
+
 
   <!-- ── PROTECTION TOGGLE ──────────────────────────────── -->
   <div class="toggle-row">

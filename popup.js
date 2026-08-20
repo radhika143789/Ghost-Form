@@ -1,4 +1,6 @@
 import { getStatusMeta } from './src/popup_ui_state.js';
+import { getProStatus } from './src/features/pro_gate.js';
+import { openCheckout } from './src/features/billing.js';
 
 /* ── Session helper (mirrors auth.js) ───────────────────── */
 function getPopupSession() {
@@ -77,6 +79,44 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (loginPrompt) loginPrompt.style.display = 'none';
     });
   }
+
+  /* ── Pro status UI ─────────────────────────────────── */
+  const proBadge      = document.getElementById('proBadge');
+  const proUpgradeCard = document.getElementById('proUpgradeCard');
+
+  const proStatus = await getProStatus();
+  if (session?.user) {
+    if (proStatus.active) {
+      // Show Pro badge, hide upgrade card
+      if (proBadge) proBadge.style.display = 'inline-flex';
+      if (proUpgradeCard) proUpgradeCard.style.display = 'none';
+    } else {
+      // Free user — show upgrade card
+      if (proUpgradeCard) proUpgradeCard.style.display = 'block';
+    }
+  }
+
+  document.getElementById('btnUpgradeMonthly')?.addEventListener('click', async () => {
+    const s = await getPopupSession();
+    if (s?.access_token) {
+      openCheckout('pro_monthly', s.access_token).catch(e =>
+        console.error('[GhostForm] Checkout error:', e)
+      );
+    } else {
+      openExtensionPage('auth.html');
+    }
+  });
+
+  document.getElementById('btnUpgradeAnnual')?.addEventListener('click', async () => {
+    const s = await getPopupSession();
+    if (s?.access_token) {
+      openCheckout('pro_annual', s.access_token).catch(e =>
+        console.error('[GhostForm] Checkout error:', e)
+      );
+    } else {
+      openExtensionPage('auth.html');
+    }
+  });
 
   // --- Protection toggle ---
   chrome.storage.local.get(['protectionEnabled'], (data) => {

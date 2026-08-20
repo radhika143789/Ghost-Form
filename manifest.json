@@ -80,7 +80,7 @@
     }
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; worker-src 'self'; connect-src 'self' https://*.supabase.co https://huggingface.co https://cdn-lfs.huggingface.co; img-src 'self' data:; style-src 'self' 'unsafe-inline'; default-src 'none'"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; worker-src 'self'; connect-src 'self' https://*.supabase.co https://huggingface.co https://cdn-lfs.huggingface.co https://checkout.stripe.com https://app.simplelogin.io; img-src 'self' data:; style-src 'self' 'unsafe-inline'; default-src 'none'"
   }
 }
 

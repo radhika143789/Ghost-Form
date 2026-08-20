@@ -206,10 +206,7 @@ export function showFinePrintWarnings(findings) {
     <span style="font-weight: 700; font-size: 13px; color: #9d8fff;">
       📜 Fine-Print AI
     </span>
-    <button id="gf-fp-close" style="
-      background: none; border: none; color: #888; cursor: pointer;
-      font-size: 16px; line-height: 1; padding: 0;
-    " aria-label="Close">×</button>
+    <button class="ghost-fine-print-dismiss" aria-label="Close">×</button>
   `;
   banner.appendChild(header);
 
@@ -237,7 +234,7 @@ export function showFinePrintWarnings(findings) {
 
   document.body.appendChild(banner);
 
-  document.getElementById('gf-fp-close')?.addEventListener('click', () => {
+  banner.querySelector('.ghost-fine-print-dismiss')?.addEventListener('click', () => {
     banner.remove();
   });
 }
