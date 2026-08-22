@@ -54,26 +54,40 @@ let   embeddingPipeline = null;
  *
  * @returns {Promise<FeatureExtractionPipeline>}
  */
+/** @type {Promise<FeatureExtractionPipeline>|null} Cached init promise to prevent double-load */
+let _pipelineInitPromise = null;
+
 async function getEmbeddingPipeline() {
   if (embeddingPipeline) return embeddingPipeline;
 
-  postMessage({ type: 'STATUS', payload: 'loading_model' });
+  // RACE CONDITION FIX: Cache the initialization Promise itself, not just
+  // the resolved value. This prevents concurrent messages from triggering
+  // parallel ~23MB ONNX model downloads that cause OOM crashes.
+  if (_pipelineInitPromise) return _pipelineInitPromise;
 
-  try {
-    embeddingPipeline = await pipeline('feature-extraction', MODEL_ID, {
-      quantized: true, // INT8 quantized — ~23MB vs ~90MB fp32
-      progress_callback: (progress) => {
-        postMessage({ type: 'MODEL_PROGRESS', payload: progress });
-      },
-    });
+  _pipelineInitPromise = (async () => {
+    postMessage({ type: 'STATUS', payload: 'loading_model' });
 
-    postMessage({ type: 'STATUS', payload: 'model_ready' });
-    return embeddingPipeline;
+    try {
+      embeddingPipeline = await pipeline('feature-extraction', MODEL_ID, {
+        quantized: true, // INT8 quantized — ~23MB vs ~90MB fp32
+        progress_callback: (progress) => {
+          postMessage({ type: 'MODEL_PROGRESS', payload: progress });
+        },
+      });
 
-  } catch (error) {
-    postMessage({ type: 'ERROR', payload: `Model load failed: ${error.message}` });
-    throw error;
-  }
+      postMessage({ type: 'STATUS', payload: 'model_ready' });
+      return embeddingPipeline;
+
+    } catch (error) {
+      // Reset promise so a retry can attempt initialization again
+      _pipelineInitPromise = null;
+      postMessage({ type: 'ERROR', payload: `Model load failed: ${error.message}` });
+      throw error;
+    }
+  })();
+
+  return _pipelineInitPromise;
 }
 
 // ---------------------------------------------------------------------------

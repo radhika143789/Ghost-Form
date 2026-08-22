@@ -178,8 +178,10 @@ export default {
     }
 
     // 2. Strict origin enforcement — reject requests not from the extension
+    // SECURITY FIX: Enforce origin is present AND matches. Previously, a missing
+    // Origin header (e.g. via cURL) would bypass this check entirely.
     const origin = request.headers.get('Origin') || '';
-    if (origin && origin !== EXTENSION_ORIGIN) {
+    if (!origin || origin !== EXTENSION_ORIGIN) {
       return new Response(JSON.stringify({ error: 'Forbidden origin' }), {
         status: 403,
         headers: { 'Content-Type': 'application/json' },

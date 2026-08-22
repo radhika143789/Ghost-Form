@@ -114,6 +114,13 @@ function sendToMLWorker(type, payload, timeoutMs = 30000) {
 
     const timer = setTimeout(() => {
       pendingRequests.delete(id);
+      // CRASH RECOVERY FIX: Terminate the stuck worker so subsequent
+      // requests get a fresh worker instead of queueing behind a blocked one.
+      if (mlWorker) {
+        console.warn('[GhostForm Offscreen] ML Worker timed out — terminating and respawning on next request.');
+        mlWorker.terminate();
+        mlWorker = null;
+      }
       reject(new Error(`ML Worker timeout for request ${id}`));
     }, timeoutMs);
 

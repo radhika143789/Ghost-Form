@@ -43,8 +43,8 @@ export function getStatusMeta(status, trackersBlocked = 0, formsWatched = 0, top
       stateClass: 'state-safe',
       pill: 'Protected',
       insight: topMatch
-        ? `Verified safe • ${mlInsight}`
-        : 'GhostForm confirmed this page looks legitimate and kept analysis local.',
+        ? `Verified safe • ${mlInsight}${xrayInsight}`
+        : `GhostForm confirmed this page looks legitimate and kept analysis local.${xrayInsight}`,
       metaLocal: 'Local trust checks',
       metaPrivacy: 'No form data shared',
       statRisk: 'LOW',

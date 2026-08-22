@@ -210,7 +210,9 @@ async function _primeLRU() {
   try {
     const all = await chrome.storage.session.get(null);
     for (const [key, value] of Object.entries(all)) {
-      if (key.startsWith('ml_status_')) {
+      // Load all Ghost Form cache keys (ml_status_, xray_, ghostprint_tab_)
+      // to prevent orphaned keys from accumulating and exhausting the 10MB quota
+      if (key.startsWith('ml_status_') || key.startsWith('xray_') || key.startsWith('ghostprint_tab_')) {
         _sessionLRU.set(key, value);
       }
     }
@@ -279,6 +281,8 @@ function _updateGraceCache(hostname, status, topMatch) {
       const oldestKey = _graceCache.keys().next().value;
       _graceCache.delete(oldestKey);
     }
+    // Delete first to ensure Map insertion order moves to end (LRU correctness)
+    _graceCache.delete(hostname);
     _graceCache.set(hostname, { status, topMatch, cachedAt: Date.now() });
   }
 }
@@ -575,7 +579,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // --- Run ML phishing analysis on scraped page text ---
   if (request.action === 'ANALYZE_PAGE') {
-    const { text, hostname } = request;
+    const { text } = request;
+    // SECURITY FIX: Derive hostname from the sender's tab URL, not the
+    // request payload — prevents telemetry poisoning by malicious pages.
+    const hostname = sender.tab?.url ? new URL(sender.tab.url).hostname : 'unknown';
     const tabId = sender.tab ? sender.tab.id : -1;
 
     // ── Circuit Breaker ──────────────────────────────────────────────────────
@@ -643,6 +650,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // --- Phase 5: Fine-Print AI — dark pattern consent analysis ---
   if (request.action === 'ANALYZE_CONSENT') {
     const { text: consentText } = request;
+    const consentTabId = sender.tab ? sender.tab.id : -1;
+
+    // SECURITY FIX: Apply circuit breaker to ANALYZE_CONSENT to prevent
+    // malicious pages from flooding the ML worker via consent analysis spam.
+    if (!isRequestAllowed(consentTabId)) {
+      console.warn(`[GhostForm] ANALYZE_CONSENT rate limited for tab ${consentTabId}.`);
+      safeRespond(sendResponse, { findings: [] });
+      return true;
+    }
+    acquireInferenceSlot();
 
     // Import the dark pattern anchors from fine_print_ai (bundled inline to avoid
     // dynamic imports in the service worker context)
@@ -669,6 +686,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       anchors: DARK_PATTERN_PHRASES,
     }, 30000)
       .then((response) => {
+        releaseInferenceSlot();
         if (response?.success) {
           const findings = (response.findings || [])
             .map((match) => {
@@ -682,7 +700,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           safeRespond(sendResponse, { findings: [] });
         }
       })
-      .catch(() => safeRespond(sendResponse, { findings: [] }));
+      .catch(() => { releaseInferenceSlot(); safeRespond(sendResponse, { findings: [] }); });
     return true;
   }
 

@@ -225,8 +225,10 @@ export function handleGhostPrintKeyup(event) {
   const dwell = Math.min(now - state.lastKeydownTime, MAX_DWELL_MS);
 
   // Flight time = time from previous keyup to current keydown (inter-keystroke gap)
+  // FIX: Clamp to 0 to prevent negative flight times during overlapping key presses
+  // (e.g., fast typing where the next keydown fires before the previous keyup).
   const flight = previousKeyupTime > 0
-    ? Math.min(state.lastKeydownTime - previousKeyupTime, MAX_FLIGHT_MS)
+    ? Math.max(0, Math.min(state.lastKeydownTime - previousKeyupTime, MAX_FLIGHT_MS))
     : 0;
 
   state.lastKeyupTime = now;  // Now update after using previousKeyupTime

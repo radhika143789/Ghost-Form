@@ -59,7 +59,7 @@
 ---
 
 ## Phase 6 — Pro Tier (Alias API, Billing, Multi-device)
-**Status:** 🟡 In Progress (~100% code done)
+**Status:** 🟡 In Progress (~100% code done, security audit applied)
 
 - **Pro Gate** (`src/features/pro_gate.js`) — `isPro()`, `getProStatus()`, `syncProStatus()` with 7-day offline cache
 - **Stripe Billing** (`src/features/billing.js`) — `openCheckout()`, `openBillingPortal()` via Supabase Edge Function
@@ -75,6 +75,30 @@
 - Create Stripe products + prices in Stripe Dashboard
 - Add `stripe_customer_id`, `is_pro`, `pro_plan`, `pro_expires_at` columns to `profiles` table
 - Stripe webhook for `customer.subscription.updated` → update `profiles.is_pro`
+
+---
+
+## Security Audit & Hardening (2026-08-22)
+**Status:** ✅ Applied
+
+### Critical Fixes
+- 🔴 **Leaked Secret Key** — Replaced real Supabase service-role key in `cloudflare-worker/.env` with placeholders. Key must be rotated in Supabase dashboard.
+- 🔴 **Telemetry Spoofing** — `ANALYZE_PAGE` handler now derives hostname from `sender.tab.url` instead of trusting the request payload (`background.js`)
+- 🔴 **Origin Bypass** — Cloudflare Worker now rejects requests with missing `Origin` header (`worker.js`)
+- 🔴 **Session Expiry Bug** — Fixed `Date.now()` vs `expires_at` (seconds vs ms) comparison in `analysis.js` and `report.js`
+
+### Bug Fixes
+- 🟠 **Dashboard Auth Guard** — Added execution halt after redirect to prevent `TypeError` on null session (`dashboard.js`)
+- 🟠 **ML Worker Double-Load** — Cached initialization Promise to prevent concurrent 23MB model downloads (`ml_worker.js`)
+- 🟠 **ML Worker Timeout Recovery** — Stuck worker is now terminated on timeout; next request spawns a fresh worker (`offscreen.js`)
+- 🟠 **LRU Grace Cache Eviction** — Fixed Map insertion order bug in `_updateGraceCache()` (`background.js`)
+- 🟠 **GhostPrint Negative Flight Time** — Clamped to `Math.max(0, ...)` to prevent baseline corruption (`ghost_print.js`)
+
+### Performance & Hardening
+- 🟡 **Circuit Breaker for ANALYZE_CONSENT** — Added rate limiting + concurrency control to prevent ML worker flooding (`background.js`)
+- 🟡 **Session Storage Quota Leak** — `_primeLRU()` now loads `xray_*` and `ghostprint_tab_*` keys in addition to `ml_status_*` (`background.js`)
+- 🟡 **Layout Thrashing** — Replaced `el.innerText` with `el.textContent` in hot loops (`fine_print_ai.js`)
+- 🟡 **X-Ray Score in Popup** — Safe domains now display the X-Ray structural score in the popup insight (`popup_ui_state.js`)
 
 ---
 
@@ -99,3 +123,4 @@
 | `popup.html/css/js` | All | Extension popup (Pro-aware) |
 | `options.html/css/js` | 2-6 | Settings (whitelist, Pro, sync, alias history) |
 | `admin-dashboard/` | 5 | React threat analytics dashboard |
+

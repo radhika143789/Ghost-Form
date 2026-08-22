@@ -210,8 +210,10 @@ Ghost Form operates with a **zero-knowledge architecture**:
 |---|---|---|
 | **Phase 1** — Foundation | ✅ Complete | Manifest V3 skeleton, blocklist, content script, popup UI |
 | **Phase 2** — Security & Infrastructure | ✅ Complete | Cloudflare proxy, MutationObserver, session cache, whitelist |
-| **Phase 3** — On-Device ML | 🟡 Active | ONNX inference, cosine similarity, circuit breaker, CSP hardening |
-| **Phase 4** — Chrome Web Store | 🔜 Planned | Icon assets, pre-computed anchor embeddings, production deploy |
+| **Phase 3** — On-Device ML | ✅ Complete | ONNX inference, cosine similarity, circuit breaker, CSP hardening |
+| **Phase 4** — Auth & Telemetry | ✅ Complete | Supabase auth, threat telemetry, JWT session management, dashboard |
+| **Phase 5** — Advanced Feature Modules | ✅ Complete | X-Ray Vision, GhostPrint, Active Shield, Ghost Masks, Fine-Print AI |
+| **Phase 6** — Pro Tier | 🟡 Active | Stripe billing, alias API, multi-device sync, Pro gate |
 
 > See [PHASE_STATUS.md](./PHASE_STATUS.md) for a detailed breakdown of every completed and pending item.
 

@@ -24,6 +24,7 @@ function getSession() {
 const session = getSession();
 if (!session) {
   window.location.href = 'auth.html';
+  throw new Error('Redirecting to auth — halt execution');
 }
 
 /* ── Supabase REST fetch ──────────────────────────────────── */

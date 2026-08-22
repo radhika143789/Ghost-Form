@@ -11,7 +11,8 @@ function getSession() {
     const raw = localStorage.getItem('gf_session');
     if (!raw) return null;
     const d = JSON.parse(raw);
-    if (Date.now() > d.expires_at) { localStorage.removeItem('gf_session'); return null; }
+    // FIX: Supabase expires_at is UNIX seconds; Date.now() is milliseconds
+    if (Date.now() > d.expires_at * 1000) { localStorage.removeItem('gf_session'); return null; }
     return d;
   } catch { return null; }
 }

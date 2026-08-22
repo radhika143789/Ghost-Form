@@ -96,7 +96,9 @@ export function extractConsentText(root = document) {
   // Priority 1: elements specifically annotated as consent/legal text
   for (const selector of CONSENT_SELECTORS) {
     for (const el of root.querySelectorAll(selector)) {
-      const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+      // PERF FIX: Use textContent first to avoid triggering synchronous reflow
+      // inside a loop. innerText forces layout recalculation per call.
+      const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
       if (text.length < 20 || text.length > 2000) continue; // Skip micro-text and huge blobs
 
       parts.push(text);
